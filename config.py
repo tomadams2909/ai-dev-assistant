@@ -5,10 +5,9 @@ EMBEDDING_MODEL = "nomic-embed-text"
 CHAT_MODEL      = "codellama"
 
 # ── Project index store ───────────────────────────────────────────
-# All projects get their own index stored here permanently
-JARVIS_HOME = Path.home() / ".jarvis"
-VECTOR_STORE = JARVIS_HOME / "vector_store"
-JARVIS_HOME.mkdir(exist_ok=True)
+REX_HOME     = Path.home() / ".rex"
+VECTOR_STORE = REX_HOME / "vector_store"
+REX_HOME.mkdir(exist_ok=True)
 VECTOR_STORE.mkdir(exist_ok=True)
 
 # ── File access rules ─────────────────────────────────────────────

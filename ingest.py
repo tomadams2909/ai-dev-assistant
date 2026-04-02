@@ -1,4 +1,3 @@
-# ingest.py
 import sys
 import ollama
 import chromadb
@@ -25,9 +24,9 @@ def chunk_file(filepath: Path, project_root: Path) -> list[dict]:
     if not lines:
         return []
 
-    chunks    = []
-    chunk_size = 60   # lines per chunk
-    overlap    = 10   # lines shared between consecutive chunks
+    chunks     = []
+    chunk_size = 60
+    overlap    = 10
 
     for i in range(0, len(lines), chunk_size - overlap):
         chunk_lines = lines[i : i + chunk_size]
@@ -69,9 +68,8 @@ def ingest(project_path: str):
         print(f"Path does not exist: {project_root}")
         sys.exit(1)
 
-    # Each project gets its own ChromaDB collection named after the folder
     project_name = project_root.name
-    print(f"\nIngesting project: {project_name}")
+    print(f"\nREX — Ingesting project: {project_name}")
     print(f"Root: {project_root}")
 
     client     = chromadb.PersistentClient(path=str(VECTOR_STORE / project_name))
