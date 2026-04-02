@@ -1,6 +1,7 @@
 import ollama
 from retriever import retrieve
-from config import CHAT_MODEL
+from config import CODE_MODEL
+from models.provider import get_provider
 
 # ── System prompt ─────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are REX (Repository Engineering eXpert), an expert developer assistant with access to the user's codebase.
@@ -61,7 +62,7 @@ Question: {question}"""
     history.append({"role": "user", "content": user_message})
 
     response = ollama.chat(
-        model=CHAT_MODEL,
+        model=CODE_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             *history
