@@ -1,10 +1,11 @@
 # api.py
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
-
+from pathlib import Path
 from orchestrator import query
 from ingest import ingest
 from config import CODE_MODEL, REASONING_MODEL, PROVIDER
@@ -21,7 +22,8 @@ app.add_middleware(
 )
 
 # ── Serve frontend static files ───────────────────────────────────
-app.mount("/app", StaticFiles(directory="frontend", html=True), name="frontend")
+BASE_DIR = Path(__file__).parent
+app.mount("/app", StaticFiles(directory=BASE_DIR / "frontend", html=True), name="frontend")
 
 # ── Session store ─────────────────────────────────────────────────
 # Holds conversation history per session in memory
@@ -55,7 +57,7 @@ class IngestResponse(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────
 @app.get("/")
 def root():
-    return {"status": "REX is running", "version": "0.1.0"}
+    return RedirectResponse(url="/app")
 
 
 @app.get("/health")

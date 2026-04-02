@@ -422,3 +422,67 @@ body { display: flex; height: 100vh; overflow: hidden; }
 .btn-send:hover    { background: var(--accent-dim); }
 .btn-send:active   { transform: scale(0.95); }
 .btn-send:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── Accent colour picker ─────────────────────────────── */
+.colour-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+input[type=color] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  cursor: pointer;
+  padding: 3px;
+  flex-shrink: 0;
+}
+
+input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type=color]::-webkit-color-swatch { border: none; border-radius: 3px; }
+
+.colour-swatches {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: border-color 0.12s, transform 0.1s;
+  flex-shrink: 0;
+}
+
+.swatch:hover {
+  border-color: var(--text-2);
+  transform: scale(1.15);
+}
+
+.dim-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.dim-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.dim-hex {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
