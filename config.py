@@ -1,8 +1,13 @@
 from pathlib import Path
 
 # ── Model settings ────────────────────────────────────────────────
-EMBEDDING_MODEL = "nomic-embed-text"
-CHAT_MODEL      = "codellama"
+PROVIDER         = "ollama"
+EMBEDDING_MODEL  = "nomic-embed-text"
+CODE_MODEL       = "codellama"   # used for code explanation and analysis
+REASONING_MODEL  = "llama3"      # used for broader reasoning and conversation
+
+# Default — orchestrator uses this unless told otherwise
+CHAT_MODEL = CODE_MODEL
 
 # ── Project index store ───────────────────────────────────────────
 REX_HOME     = Path.home() / ".rex"
