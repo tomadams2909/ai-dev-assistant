@@ -47,7 +47,7 @@ def chunk_file(filepath: Path, project_root: Path) -> list[dict]:
 # ── Embedding ─────────────────────────────────────────────────────
 def embed(text: str) -> list[float]:
     """Convert text to a vector using Ollama locally."""
-    response = ollama.embeddings(model=EMBEDDING_MODEL, prompt=text)
+    response = ollama.embeddings(model=EMBEDDING_MODEL, prompt=text, options={"num_ctx": 8192})
     return response["embedding"]
 
 
