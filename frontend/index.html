@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>REX — Repository Engineering eXpert</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ── Sidebar ─────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="logo">REX</span>
+      <span class="logo-sub">Repository Engineering eXpert</span>
+    </div>
+
+    <div class="sidebar-section">
+      <label class="field-label">Project</label>
+      <input
+        id="project-name"
+        class="field-input"
+        type="text"
+        placeholder="e.g. insurance-platform"
+      />
+    </div>
+
+    <div class="sidebar-section">
+      <label class="field-label">Index a new project</label>
+      <input
+        id="project-path"
+        class="field-input"
+        type="text"
+        placeholder="C:\tom\repos\my-project"
+      />
+      <button id="ingest-btn" class="btn-ingest" onclick="ingestProject()">
+        Index Project
+      </button>
+      <div id="ingest-status" class="status-msg"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <label class="field-label">Model</label>
+      <div class="model-toggle">
+        <button id="btn-code" class="model-btn active" onclick="setModel('code')">
+          Code
+        </button>
+        <button id="btn-reasoning" class="model-btn" onclick="setModel('reasoning')">
+          Reasoning
+        </button>
+      </div>
+      <span id="model-label" class="model-label">codellama</span>
+    </div>
+
+    <div class="sidebar-section">
+      <label class="field-label">Results per query</label>
+      <div class="slider-row">
+        <input type="range" id="n-results" min="1" max="10" value="5"
+               oninput="document.getElementById('n-results-val').textContent = this.value"/>
+        <span id="n-results-val" class="slider-val">5</span>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="btn-clear" onclick="clearSession()">New Session</button>
+      <div id="server-status" class="server-status">Connecting...</div>
+    </div>
+  </aside>
+
+  <!-- ── Main chat area ──────────────────────────────────── -->
+  <main class="main">
+    <div id="chat-window" class="chat-window">
+      <div class="welcome">
+        <div class="welcome-title">Ready to explore your codebase.</div>
+        <div class="welcome-sub">Set a project name on the left, then start asking.</div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="input-row">
+        <textarea
+          id="question-input"
+          class="question-input"
+          placeholder="Ask anything about your codebase..."
+          rows="1"
+          onkeydown="handleKey(event)"
+          oninput="autoResize(this)"
+        ></textarea>
+        <button class="btn-send" onclick="sendQuery()" id="send-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API = "http://127.0.0.1:8000";
+    let sessionId   = crypto.randomUUID();
+    let currentModel = "codellama";
+    let isLoading   = false;
+
+    // ── Server health check ──────────────────────────────
+    async function checkHealth() {
+      try {
+        const res = await fetch(`${API}/health`);
+        if (res.ok) {
+          document.getElementById("server-status").textContent = "REX online";
+          document.getElementById("server-status").className = "server-status online";
+
+          // Load model names from backend
+          const mRes  = await fetch(`${API}/models`);
+          const mData = await mRes.json();
+          window.CODE_MODEL      = mData.models.code;
+          window.REASONING_MODEL = mData.models.reasoning;
+          currentModel           = window.CODE_MODEL;
+          document.getElementById("model-label").textContent = currentModel;
+        }
+      } catch {
+        document.getElementById("server-status").textContent = "REX offline";
+        document.getElementById("server-status").className = "server-status offline";
+        setTimeout(checkHealth, 3000);
+      }
+    }
+
+    // ── Model toggle ─────────────────────────────────────
+    function setModel(type) {
+      const isCode = type === "code";
+      currentModel = isCode ? window.CODE_MODEL : window.REASONING_MODEL;
+      document.getElementById("model-label").textContent = currentModel;
+      document.getElementById("btn-code").classList.toggle("active", isCode);
+      document.getElementById("btn-reasoning").classList.toggle("active", !isCode);
+    }
+
+    // ── Ingest project ───────────────────────────────────
+    async function ingestProject() {
+      const path   = document.getElementById("project-path").value.trim();
+      const status = document.getElementById("ingest-status");
+      if (!path) { status.textContent = "Enter a project path."; return; }
+
+      status.textContent = "Indexing... this may take a minute.";
+      status.className   = "status-msg";
+
+      try {
+        const res  = await fetch(`${API}/ingest`, {
+          method:  "POST",
+          headers: {"Content-Type": "application/json"},
+          body:    JSON.stringify({ project_path: path })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          status.textContent = `Done — '${data.project_name}' indexed.`;
+          status.className   = "status-msg success";
+          document.getElementById("project-name").value = data.project_name;
+        } else {
+          status.textContent = `Error: ${data.detail}`;
+          status.className   = "status-msg error";
+        }
+      } catch (e) {
+        status.textContent = "Could not reach REX server.";
+        status.className   = "status-msg error";
+      }
+    }
+
+    // ── Send query ───────────────────────────────────────
+    async function sendQuery() {
+      if (isLoading) return;
+
+      const question = document.getElementById("question-input").value.trim();
+      const project  = document.getElementById("project-name").value.trim();
+      const nResults = parseInt(document.getElementById("n-results").value);
+
+      if (!question) return;
+      if (!project)  { appendMessage("system", "Set a project name in the sidebar first."); return; }
+
+      appendMessage("user", question);
+      document.getElementById("question-input").value = "";
+      autoResize(document.getElementById("question-input"));
+
+      const thinkingId = appendThinking();
+      isLoading = true;
+      document.getElementById("send-btn").disabled = true;
+
+      try {
+        const res  = await fetch(`${API}/query`, {
+          method:  "POST",
+          headers: {"Content-Type": "application/json"},
+          body:    JSON.stringify({
+            question,
+            project_name: project,
+            session_id:   sessionId,
+            model:        currentModel,
+            n_results:    nResults
+          })
+        });
+        const data = await res.json();
+        removeThinking(thinkingId);
+
+        if (res.ok) {
+          appendMessage("assistant", data.answer, data.sources);
+        } else {
+          appendMessage("system", `Error: ${data.detail}`);
+        }
+      } catch (e) {
+        removeThinking(thinkingId);
+        appendMessage("system", "Could not reach REX server.");
+      }
+
+      isLoading = false;
+      document.getElementById("send-btn").disabled = false;
+    }
+
+    // ── Clear session ────────────────────────────────────
+    async function clearSession() {
+      await fetch(`${API}/session/${sessionId}`, { method: "DELETE" });
+      sessionId = crypto.randomUUID();
+      const chat = document.getElementById("chat-window");
+      chat.innerHTML = `
+        <div class="welcome">
+          <div class="welcome-title">Ready to explore your codebase.</div>
+          <div class="welcome-sub">Set a project name on the left, then start asking.</div>
+        </div>`;
+    }
+
+    // ── DOM helpers ──────────────────────────────────────
+    function appendMessage(role, text, sources = []) {
+      const chat = document.getElementById("chat-window");
+      const wrap = document.createElement("div");
+      wrap.className = `message ${role}`;
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.textContent = text;
+      wrap.appendChild(bubble);
+
+      if (sources && sources.length > 0) {
+        const src = document.createElement("div");
+        src.className = "sources";
+        src.innerHTML = "<span class='sources-label'>Sources</span>" +
+          sources.map(s =>
+            `<span class="source-chip">${s.filepath}:${s.start_line} <em>${s.score}</em></span>`
+          ).join("");
+        wrap.appendChild(src);
+      }
+
+      // Remove welcome message on first real message
+      const welcome = chat.querySelector(".welcome");
+      if (welcome) welcome.remove();
+
+      chat.appendChild(wrap);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function appendThinking() {
+      const chat = document.getElementById("chat-window");
+      const id   = "thinking-" + Date.now();
+      const div  = document.createElement("div");
+      div.className = "message assistant thinking";
+      div.id        = id;
+      div.innerHTML = `<div class="bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return id;
+    }
+
+    function removeThinking(id) {
+      document.getElementById(id)?.remove();
+    }
+
+    function handleKey(e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendQuery();
+      }
+    }
+
+    function autoResize(el) {
+      el.style.height = "auto";
+      el.style.height = Math.min(el.scrollHeight, 160) + "px";
+    }
+
+    checkHealth();
+  </script>
+</body>
+</html>
