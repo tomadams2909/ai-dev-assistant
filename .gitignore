@@ -1,0 +1,20 @@
+# Environment
+.env
+.env.local
+*.env
+
+# Vector store (large binary files, rebuild locally)
+vector_store/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Models (never commit these, they're gigabytes)
+*.gguf
+*.bin
+
+# VSCode
+.vscode/settings.json
