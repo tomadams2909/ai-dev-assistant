@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- Prism VS Code Dark+ syntax theme -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prism-themes@1.9.0/themes/prism-vsc-dark-plus.css" />
 </head>
 <body>
 
@@ -118,11 +120,85 @@
     </div>
   </main>
 
+  <!-- marked.js — markdown parser -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <!-- Prism core — bundles markup (HTML), CSS, clike, JavaScript -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <!-- Additional language grammars -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+
   <script>
     const API = "http://127.0.0.1:8000";
-    let sessionId   = crypto.randomUUID();
+    let sessionId    = crypto.randomUUID();
     let currentModel = "codellama";
-    let isLoading   = false;
+    let isLoading    = false;
+
+    // ── Markdown + syntax highlighting setup ─────────────
+    // Language aliases: normalize LLM-generated fence names to Prism names
+    const LANG_ALIAS = {
+      js: 'javascript', ts: 'typescript', py: 'python',
+      sh: 'bash', shell: 'bash', zsh: 'bash',
+      html: 'markup', xml: 'markup', svg: 'markup',
+    };
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // Configure marked: custom renderer hooks Prism into every code block
+    marked.use({
+      gfm: true,
+      breaks: true,
+      renderer: {
+        code({ text, lang }) {
+          const normalized = LANG_ALIAS[lang] ?? lang ?? '';
+          const grammar    = normalized && Prism.languages[normalized];
+          const highlighted = grammar
+            ? Prism.highlight(text, grammar, normalized)
+            : escapeHtml(text);
+          const cls = normalized ? ` language-${normalized}` : '';
+          return `<pre class="language-${normalized || 'text'}"><code class="${cls}">${highlighted}</code></pre>`;
+        },
+      },
+    });
+
+    // Per-bubble debounce timer map (cleared on finalize)
+    const debounceTimers = new Map();
+
+    // Inject a "copy" button into every <pre> inside el that doesn't have one
+    function addCopyButtons(el) {
+      el.querySelectorAll('pre').forEach(pre => {
+        if (pre.querySelector('.copy-btn')) return;
+        const code = pre.querySelector('code');
+        if (!code) return;
+        const btn = document.createElement('button');
+        btn.className   = 'copy-btn';
+        btn.textContent = 'copy';
+        btn.addEventListener('click', () => {
+          navigator.clipboard.writeText(code.innerText).then(() => {
+            btn.textContent = '✓';
+            btn.classList.add('copied');
+            setTimeout(() => {
+              btn.textContent = 'copy';
+              btn.classList.remove('copied');
+            }, 1500);
+          });
+        });
+        pre.appendChild(btn);
+      });
+    }
+
+    // Parse raw markdown and update the .md div inside a streaming bubble
+    function renderMarkdownIntoBubble(wrap) {
+      const raw = wrap.dataset.raw || '';
+      const md  = wrap.querySelector('.md');
+      if (md) md.innerHTML = marked.parse(raw);
+    }
 
     // ── Server health check ──────────────────────────────
     async function checkHealth() {
@@ -306,17 +382,24 @@
 
     // ── Streaming bubble helpers ─────────────────────────
     function appendStreamingBubble() {
-      const chat   = document.getElementById("chat-window");
-      const id     = "stream-" + Date.now();
-      const wrap   = document.createElement("div");
-      wrap.className = "message assistant";
-      wrap.id        = id;
+      const chat = document.getElementById("chat-window");
+      const id   = "stream-" + Date.now();
+
+      const wrap = document.createElement("div");
+      wrap.className  = "message assistant";
+      wrap.id         = id;
+      wrap.dataset.raw = "";       // accumulates raw markdown tokens
 
       const bubble = document.createElement("div");
       bubble.className = "bubble";
 
+      // .md holds the rendered markdown; cursor sits after it
+      const md     = document.createElement("div");
+      md.className = "md";
       const cursor = document.createElement("span");
       cursor.className = "stream-cursor";
+
+      bubble.appendChild(md);
       bubble.appendChild(cursor);
       wrap.appendChild(bubble);
 
@@ -331,17 +414,33 @@
     function appendToStreamingBubble(id, token) {
       const wrap = document.getElementById(id);
       if (!wrap) return;
-      const bubble = wrap.querySelector(".bubble");
-      const cursor = bubble.querySelector(".stream-cursor");
-      bubble.insertBefore(document.createTextNode(token), cursor);
-      const chat = document.getElementById("chat-window");
-      chat.scrollTop = chat.scrollHeight;
+
+      wrap.dataset.raw += token;
+
+      // Debounce the re-render: 80 ms gives fluid-feeling updates
+      // without hammering the DOM on every single token
+      clearTimeout(debounceTimers.get(id));
+      debounceTimers.set(id, setTimeout(() => {
+        renderMarkdownIntoBubble(wrap);
+        document.getElementById("chat-window").scrollTop =
+          document.getElementById("chat-window").scrollHeight;
+      }, 80));
     }
 
     function finalizeStreamingBubble(id, sources) {
       const wrap = document.getElementById(id);
       if (!wrap) return;
+
+      // Cancel any pending debounce and do one authoritative final render
+      clearTimeout(debounceTimers.get(id));
+      debounceTimers.delete(id);
+
+      renderMarkdownIntoBubble(wrap);
+
       const bubble = wrap.querySelector(".bubble");
+      // Copy buttons only make sense on the finished response
+      addCopyButtons(bubble.querySelector(".md"));
+      // Remove blinking cursor
       bubble.querySelector(".stream-cursor")?.remove();
 
       if (sources && sources.length > 0) {
@@ -354,11 +453,13 @@
         wrap.appendChild(src);
       }
 
-      const chat = document.getElementById("chat-window");
-      chat.scrollTop = chat.scrollHeight;
+      document.getElementById("chat-window").scrollTop =
+        document.getElementById("chat-window").scrollHeight;
     }
 
     function removeStreamingBubble(id) {
+      clearTimeout(debounceTimers.get(id));
+      debounceTimers.delete(id);
       document.getElementById(id)?.remove();
     }
 
