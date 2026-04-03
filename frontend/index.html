@@ -186,7 +186,7 @@
       }
     }
 
-    // ── Send query ───────────────────────────────────────
+    // ── Send query (streaming) ───────────────────────────
     async function sendQuery() {
       if (isLoading) return;
 
@@ -201,12 +201,13 @@
       document.getElementById("question-input").value = "";
       autoResize(document.getElementById("question-input"));
 
-      const thinkingId = appendThinking();
       isLoading = true;
       document.getElementById("send-btn").disabled = true;
 
+      const bubbleId = appendStreamingBubble();
+
       try {
-        const res  = await fetch(`${API}/query`, {
+        const res = await fetch(`${API}/stream`, {
           method:  "POST",
           headers: {"Content-Type": "application/json"},
           body:    JSON.stringify({
@@ -217,16 +218,44 @@
             n_results:    nResults
           })
         });
-        const data = await res.json();
-        removeThinking(thinkingId);
 
-        if (res.ok) {
-          appendMessage("assistant", data.answer, data.sources);
-        } else {
+        if (!res.ok) {
+          const data = await res.json();
+          removeStreamingBubble(bubbleId);
           appendMessage("system", `Error: ${data.detail}`);
+        } else {
+          const reader  = res.body.getReader();
+          const decoder = new TextDecoder();
+          let   sseBuffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            sseBuffer += decoder.decode(value, { stream: true });
+
+            // SSE events are delimited by double newlines
+            const events = sseBuffer.split("\n\n");
+            sseBuffer = events.pop(); // keep any incomplete trailing chunk
+
+            for (const block of events) {
+              if (!block.startsWith("data: ")) continue;
+              let event;
+              try { event = JSON.parse(block.slice(6)); } catch { continue; }
+
+              if (event.type === "token") {
+                appendToStreamingBubble(bubbleId, event.content);
+              } else if (event.type === "done") {
+                finalizeStreamingBubble(bubbleId, event.sources);
+              } else if (event.type === "error") {
+                removeStreamingBubble(bubbleId);
+                appendMessage("system", `Error: ${event.detail}`);
+              }
+            }
+          }
         }
       } catch (e) {
-        removeThinking(thinkingId);
+        removeStreamingBubble(bubbleId);
         appendMessage("system", "Could not reach REX server.");
       }
 
@@ -275,19 +304,61 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
-    function appendThinking() {
-      const chat = document.getElementById("chat-window");
-      const id   = "thinking-" + Date.now();
-      const div  = document.createElement("div");
-      div.className = "message assistant thinking";
-      div.id        = id;
-      div.innerHTML = `<div class="bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
-      chat.appendChild(div);
+    // ── Streaming bubble helpers ─────────────────────────
+    function appendStreamingBubble() {
+      const chat   = document.getElementById("chat-window");
+      const id     = "stream-" + Date.now();
+      const wrap   = document.createElement("div");
+      wrap.className = "message assistant";
+      wrap.id        = id;
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+
+      const cursor = document.createElement("span");
+      cursor.className = "stream-cursor";
+      bubble.appendChild(cursor);
+      wrap.appendChild(bubble);
+
+      const welcome = chat.querySelector(".welcome");
+      if (welcome) welcome.remove();
+
+      chat.appendChild(wrap);
       chat.scrollTop = chat.scrollHeight;
       return id;
     }
 
-    function removeThinking(id) {
+    function appendToStreamingBubble(id, token) {
+      const wrap = document.getElementById(id);
+      if (!wrap) return;
+      const bubble = wrap.querySelector(".bubble");
+      const cursor = bubble.querySelector(".stream-cursor");
+      bubble.insertBefore(document.createTextNode(token), cursor);
+      const chat = document.getElementById("chat-window");
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function finalizeStreamingBubble(id, sources) {
+      const wrap = document.getElementById(id);
+      if (!wrap) return;
+      const bubble = wrap.querySelector(".bubble");
+      bubble.querySelector(".stream-cursor")?.remove();
+
+      if (sources && sources.length > 0) {
+        const src = document.createElement("div");
+        src.className = "sources";
+        src.innerHTML = "<span class='sources-label'>Sources</span>" +
+          sources.map(s =>
+            `<span class="source-chip">${s.filepath}:${s.start_line} <em>${s.score}</em></span>`
+          ).join("");
+        wrap.appendChild(src);
+      }
+
+      const chat = document.getElementById("chat-window");
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function removeStreamingBubble(id) {
       document.getElementById(id)?.remove();
     }
 

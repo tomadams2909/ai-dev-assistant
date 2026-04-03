@@ -1,5 +1,6 @@
 # models/ollama_provider.py
 from abc import ABC, abstractmethod
+from typing import Iterator
 import ollama
 from config import CODE_MODEL, REASONING_MODEL, EMBEDDING_MODEL, PROVIDER
 
@@ -11,6 +12,11 @@ class ModelProvider(ABC):
     @abstractmethod
     def chat(self, system: str, messages: list[dict]) -> str:
         """Send a conversation and return the response string."""
+        pass
+
+    @abstractmethod
+    def chat_stream(self, system: str, messages: list[dict]) -> Iterator[str]:
+        """Stream response tokens one by one."""
         pass
 
     @abstractmethod
@@ -51,6 +57,20 @@ class OllamaProvider(ModelProvider):
         )
         return response["message"]["content"]
 
+    def chat_stream(self, system: str, messages: list[dict]) -> Iterator[str]:
+        stream = ollama.chat(
+            model=self.chat_model,
+            messages=[
+                {"role": "system", "content": system},
+                *messages
+            ],
+            stream=True,
+        )
+        for chunk in stream:
+            token = chunk["message"]["content"]
+            if token:
+                yield token
+
     def embed(self, text: str) -> list[float]:
         response = ollama.embeddings(
             model=self.embedding_model,
@@ -66,6 +86,10 @@ class ClaudeProvider(ModelProvider):
     def chat(self, system: str, messages: list[dict]) -> str:
         raise NotImplementedError("Claude provider not yet configured.")
 
+    def chat_stream(self, system: str, messages: list[dict]) -> Iterator[str]:
+        raise NotImplementedError("Claude provider not yet configured.")
+        yield  # make static analysis happy
+
     def embed(self, text: str) -> list[float]:
         raise NotImplementedError("Claude provider not yet configured.")
 
@@ -75,6 +99,10 @@ class OpenAIProvider(ModelProvider):
 
     def chat(self, system: str, messages: list[dict]) -> str:
         raise NotImplementedError("OpenAI provider not yet configured.")
+
+    def chat_stream(self, system: str, messages: list[dict]) -> Iterator[str]:
+        raise NotImplementedError("OpenAI provider not yet configured.")
+        yield  # make static analysis happy
 
     def embed(self, text: str) -> list[float]:
         raise NotImplementedError("OpenAI provider not yet configured.")

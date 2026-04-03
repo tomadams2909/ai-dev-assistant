@@ -1,5 +1,6 @@
 # orchestrator.py
 import re
+from typing import Iterator
 from retriever import retrieve
 from config import CODE_MODEL
 from models.provider import get_provider
@@ -29,6 +30,54 @@ def build_context(chunks: list[dict]) -> str:
         context += f"\n--- {chunk['filepath']} (lines {chunk['start_line']}–{chunk['end_line']}) ---\n"
         context += chunk["text"] + "\n"
     return context
+
+
+# ── Think-tag stripper for streaming ─────────────────────────────
+def _strip_think_stream(token_stream: Iterator[str]) -> Iterator[str]:
+    """
+    Filter <think>…</think> blocks out of a streaming token iterator.
+
+    DeepSeek-r1 emits chain-of-thought inside <think> tags before the
+    answer.  We buffer until we know whether the stream starts with
+    <think>, discard everything inside that block, then yield the rest
+    token-by-token with no extra latency.
+    """
+    OPEN  = "<think>"
+    CLOSE = "</think>"
+
+    buf      = ""
+    in_think = False
+    decided  = False
+
+    for token in token_stream:
+        if not decided:
+            buf += token
+            if buf.startswith(OPEN):
+                in_think = True
+                decided  = True
+                buf      = buf[len(OPEN):]
+            elif len(buf) >= len(OPEN) or not OPEN.startswith(buf):
+                # Buffer is long enough — no think tag is coming
+                decided  = True
+                in_think = False
+                yield buf
+                buf = ""
+            # else: still accumulating — could still be start of <think>
+        elif in_think:
+            buf += token
+            idx = buf.find(CLOSE)
+            if idx != -1:
+                in_think = False
+                buf = buf[idx + len(CLOSE):].lstrip("\n ")
+                if buf:
+                    yield buf
+                    buf = ""
+        else:
+            yield token
+
+    # Flush anything left after the loop (only if we're not mid-think)
+    if buf and not in_think:
+        yield buf
 
 
 # ── Main query function ───────────────────────────────────────────
@@ -81,6 +130,49 @@ def query(
     save_session(session)
 
     return answer, session
+
+
+# ── Streaming query ───────────────────────────────────────────────
+def query_stream(
+    question: str,
+    session: Session,
+    n_results: int = 5,
+    model: str = CODE_MODEL,
+) -> Iterator[str]:
+    """
+    Streaming variant of query().
+
+    Yields clean response tokens one by one as they arrive from Ollama.
+    <think> blocks are stripped in real time before any token reaches
+    the caller.
+
+    Session history is updated and persisted to disk after the last
+    token has been yielded (i.e. after the caller exhausts this
+    generator).
+    """
+    chunks  = retrieve(question, session.project_name, n_results)
+    context = build_context(chunks)
+
+    user_message_with_context = f"Codebase context:\n{context}\n\nQuestion: {question}"
+
+    messages = build_messages(session)
+    messages.append({"role": "user", "content": user_message_with_context})
+
+    raw_stream = get_provider(model=model).chat_stream(SYSTEM_PROMPT, messages)
+
+    accumulated: list[str] = []
+    for token in _strip_think_stream(raw_stream):
+        accumulated.append(token)
+        yield token
+
+    # Persist session after stream completes
+    answer = "".join(accumulated)
+    session.history.append({"role": "user",      "content": question})
+    session.history.append({"role": "assistant",  "content": answer})
+    session.full_log.append({"role": "user",      "content": question})
+    session.full_log.append({"role": "assistant",  "content": answer})
+    trim_history(session)
+    save_session(session)
 
 
 # ── CLI entry point ───────────────────────────────────────────────

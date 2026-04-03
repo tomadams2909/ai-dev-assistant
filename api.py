@@ -1,12 +1,13 @@
 # api.py
+import json
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from pathlib import Path
-from orchestrator import query
+from orchestrator import query, query_stream
 from ingest import ingest
 from config import CODE_MODEL, REASONING_MODEL, PROVIDER
 from memory import Session, new_session, load_session, list_sessions, delete_session
@@ -52,6 +53,13 @@ class IngestResponse(BaseModel):
     success:      bool
     message:      str
     project_name: str
+
+class StreamRequest(BaseModel):
+    question:     str
+    project_name: str
+    session_id:   str = "default"
+    model:        str = CODE_MODEL
+    n_results:    int = 5
 
 
 # ── Routes ────────────────────────────────────────────────────────
@@ -146,6 +154,74 @@ def query_project(request: QueryRequest):
             "end_line":   s["end_line"],
             "score":      s["score"],
         } for s in sources]
+    )
+
+
+@app.post("/stream")
+def stream_query(request: StreamRequest):
+    """
+    Ask a question and receive the answer as a Server-Sent Events stream.
+
+    Each SSE message carries a JSON payload:
+      {"type": "token",  "content": "<text>"}      — one streamed token
+      {"type": "done",   "session_id": "...",
+                         "sources":   [...]}        — stream finished
+      {"type": "error",  "detail": "<msg>"}         — something went wrong
+
+    The existing /query endpoint is unchanged.
+    """
+    allowed_models = {CODE_MODEL, REASONING_MODEL}
+    if request.model not in allowed_models:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid model. Choose from: {allowed_models}"
+        )
+
+    # Load session: memory cache → disk → create new
+    session = sessions.get(request.session_id)
+    if session is None:
+        session = load_session(request.session_id)
+    if session is None:
+        session = new_session(request.project_name, session_id=request.session_id)
+
+    def event_generator():
+        try:
+            for token in query_stream(
+                question=request.question,
+                session=session,
+                n_results=request.n_results,
+                model=request.model,
+            ):
+                yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+
+            # Stream complete — session was saved inside query_stream
+            sessions[session.session_id] = session
+
+            from retriever import retrieve
+            raw_sources = retrieve(request.question, request.project_name, request.n_results)
+            sources = [
+                {
+                    "filepath":   s["filepath"],
+                    "start_line": s["start_line"],
+                    "end_line":   s["end_line"],
+                    "score":      s["score"],
+                }
+                for s in raw_sources
+            ]
+            yield f"data: {json.dumps({'type': 'done', 'session_id': session.session_id, 'sources': sources})}\n\n"
+
+        except FileNotFoundError as e:
+            yield f"data: {json.dumps({'type': 'error', 'detail': str(e)})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'detail': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":    "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
