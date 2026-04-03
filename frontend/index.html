@@ -21,12 +21,16 @@
 
     <div class="sidebar-section">
       <label class="field-label">Project</label>
-      <input
-        id="project-name"
-        class="field-input"
-        type="text"
-        placeholder="e.g. insurance-platform"
-      />
+      <div class="project-dropdown" id="project-dropdown">
+        <input
+          id="project-name"
+          class="field-input"
+          type="text"
+          placeholder="e.g. insurance-platform"
+          autocomplete="off"
+        />
+        <ul class="project-suggestions" id="project-suggestions" hidden></ul>
+      </div>
     </div>
 
     <div class="sidebar-section">
@@ -237,6 +241,7 @@
         window.REASONING_MODEL = mData.models.reasoning;
         currentModel           = window.CODE_MODEL;
         document.getElementById("model-label").textContent = currentModel;
+        await loadProjects();
       }
     } catch {
       document.getElementById("server-status").textContent = "REX offline";
@@ -274,6 +279,7 @@
         status.textContent = `Done — '${data.project_name}' indexed.`;
         status.className   = "status-msg success";
         document.getElementById("project-name").value = data.project_name;
+        await loadProjects();
       } else {
         status.textContent = `Error: ${data.detail}`;
         status.className   = "status-msg error";
@@ -536,6 +542,111 @@
 
   updateAccent(localStorage.getItem('rex-accent') || '#c8ff00');
   checkHealth();
+
+  // ── Project filterable dropdown ───────────────────────
+  let allProjects    = [];
+  let suggestionIdx  = -1;
+
+  async function loadProjects() {
+    try {
+      const res = await fetch(`${API}/projects`);
+      if (res.ok) {
+        const data = await res.json();
+        allProjects = data.projects || [];
+      }
+    } catch { /* server offline — no-op */ }
+  }
+
+  function renderSuggestions(filter) {
+    const list     = document.getElementById('project-suggestions');
+    const filtered = (filter && filter.trim())
+      ? allProjects.filter(p => p.toLowerCase().includes(filter.toLowerCase()))
+      : allProjects;
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<li class="suggestion-item suggestion-empty">No results</li>';
+      list.hidden = false;
+      document.getElementById('project-dropdown').classList.add('open');
+      return;
+    }
+
+    list.innerHTML = filtered.map(p =>
+      `<li class="suggestion-item" data-name="${p}">${p}</li>`
+    ).join('');
+
+    list.querySelectorAll('.suggestion-item').forEach(li => {
+      li.addEventListener('mousedown', e => {
+        e.preventDefault(); // keep input focus until we choose
+        selectProject(li.dataset.name);
+      });
+    });
+
+    suggestionIdx = -1;
+    list.hidden = false;
+    document.getElementById('project-dropdown').classList.add('open');
+  }
+
+  function selectProject(name) {
+    document.getElementById('project-name').value = name;
+    document.getElementById('project-suggestions').hidden = true;
+    document.getElementById('project-dropdown').classList.remove('open');
+    suggestionIdx = -1;
+  }
+
+  function closeSuggestions() {
+    document.getElementById('project-suggestions').hidden = true;
+    document.getElementById('project-dropdown').classList.remove('open');
+    suggestionIdx = -1;
+  }
+
+  // Wire up input events
+  (function () {
+    const input = document.getElementById('project-name');
+    const list  = document.getElementById('project-suggestions');
+
+    input.addEventListener('focus', () => {
+      if (allProjects.length > 0) renderSuggestions(input.value);
+    });
+
+    input.addEventListener('input', () => {
+      renderSuggestions(input.value);
+    });
+
+    input.addEventListener('keydown', e => {
+      if (list.hidden) return;
+      const items = list.querySelectorAll('.suggestion-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        suggestionIdx = Math.min(suggestionIdx + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle('active', i === suggestionIdx));
+        items[suggestionIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        suggestionIdx = Math.max(suggestionIdx - 1, -1);
+        items.forEach((el, i) => el.classList.toggle('active', i === suggestionIdx));
+        if (suggestionIdx >= 0) items[suggestionIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        if (suggestionIdx >= 0 && items[suggestionIdx]) {
+          e.preventDefault();
+          selectProject(items[suggestionIdx].dataset.name);
+        }
+      } else if (e.key === 'Escape') {
+        closeSuggestions();
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      // Delay so mousedown on a suggestion fires before blur hides the list
+      setTimeout(closeSuggestions, 150);
+    });
+  })();
+
+  // Close on click outside the dropdown
+  document.addEventListener('click', e => {
+    if (!document.getElementById('project-dropdown').contains(e.target)) {
+      closeSuggestions();
+    }
+  });
 </script>
 </body>
 </html>

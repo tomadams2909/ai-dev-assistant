@@ -9,7 +9,7 @@ import uvicorn
 from pathlib import Path
 from orchestrator import query, query_stream
 from ingest import ingest
-from config import CODE_MODEL, REASONING_MODEL, PROVIDER
+from config import CODE_MODEL, REASONING_MODEL, PROVIDER, VECTOR_STORE
 from memory import Session, new_session, load_session, list_sessions, delete_session
 
 app = FastAPI(title="REX — Repository Engineering eXpert")
@@ -84,6 +84,15 @@ def list_models():
             "reasoning": REASONING_MODEL,
         }
     }
+
+
+@app.get("/projects")
+def list_projects():
+    """Return a sorted list of all previously ingested project names."""
+    if not VECTOR_STORE.exists():
+        return {"projects": []}
+    projects = sorted(p.name for p in VECTOR_STORE.iterdir() if p.is_dir())
+    return {"projects": projects}
 
 
 @app.post("/ingest", response_model=IngestResponse)
