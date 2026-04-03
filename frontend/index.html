@@ -15,7 +15,10 @@
   <!-- ── Sidebar ─────────────────────────────────────────── -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <span class="logo">REX</span>
+      <div class="logo-row">
+        <span id="rex-icon-slot" aria-hidden="true"></span>
+        <span class="logo">REX</span>
+      </div>
       <span class="logo-sub">Repository Engineering eXpert</span>
     </div>
 
@@ -137,9 +140,84 @@
 
   <script>
   const API = "http://127.0.0.1:8000";
-  let sessionId    = crypto.randomUUID();
-  let currentModel = "codellama";
-  let isLoading    = false;
+  let sessionId      = crypto.randomUUID();
+  let currentModel   = "codellama";
+  let isLoading      = false;
+  let rexSpriteReady = false;
+
+  // ── Rex SVG sprite ───────────────────────────────────
+  async function initRexSprite() {
+    try {
+      const res  = await fetch('images/rex_logo.svg');
+      const text = await res.text();
+      const parser = new DOMParser();
+      const svgDoc = parser.parseFromString(text, 'image/svg+xml');
+      const paths  = Array.from(svgDoc.querySelectorAll('path'));
+
+      // Measure total path length using a temporary off-screen SVG
+      const measurer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      measurer.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;width:0;height:0';
+      document.body.appendChild(measurer);
+      let totalLength = 0;
+      paths.forEach(p => {
+        const clone = p.cloneNode(true);
+        measurer.appendChild(clone);
+        try { totalLength += clone.getTotalLength(); } catch(e) {}
+        measurer.removeChild(clone);
+      });
+      document.body.removeChild(measurer);
+      const dashLen = Math.ceil(totalLength) + 500;
+      document.documentElement.style.setProperty('--rex-dash-length', String(dashLen));
+
+      // Build hidden sprite with two symbols
+      const sprite = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      sprite.style.display = 'none';
+      sprite.setAttribute('aria-hidden', 'true');
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+
+      // Solid fill symbol (sidebar icon)
+      const symFill = document.createElementNS('http://www.w3.org/2000/svg', 'symbol');
+      symFill.setAttribute('id', 'rex-skull');
+      symFill.setAttribute('viewBox', '0 0 752 576');
+      paths.forEach(p => {
+        const clone = p.cloneNode(true);
+        clone.setAttribute('fill', 'currentColor');
+        clone.removeAttribute('opacity');
+        clone.removeAttribute('stroke');
+        symFill.appendChild(clone);
+      });
+
+      // Outline/stroke symbol (loader animation)
+      const symOutline = document.createElementNS('http://www.w3.org/2000/svg', 'symbol');
+      symOutline.setAttribute('id', 'rex-skull-outline');
+      symOutline.setAttribute('viewBox', '0 0 752 576');
+      paths.forEach(p => {
+        const clone = p.cloneNode(true);
+        clone.setAttribute('fill', 'none');
+        clone.setAttribute('stroke', 'currentColor');
+        clone.setAttribute('stroke-width', '15');
+        clone.setAttribute('stroke-linejoin', 'miter');
+        clone.setAttribute('stroke-linecap', 'butt');
+        symOutline.appendChild(clone);
+      });
+
+      defs.appendChild(symFill);
+      defs.appendChild(symOutline);
+      sprite.appendChild(defs);
+      document.body.insertBefore(sprite, document.body.firstChild);
+
+      rexSpriteReady = true;
+      injectSidebarIcon();
+    } catch(e) { /* no-op — icon is decorative */ }
+  }
+
+  function injectSidebarIcon() {
+    const slot = document.getElementById('rex-icon-slot');
+    if (!slot || !rexSpriteReady) return;
+    slot.innerHTML =
+      '<svg class="rex-icon" width="32" height="32" viewBox="0 0 752 576"' +
+      ' xmlns="http://www.w3.org/2000/svg"><use href="#rex-skull"/></svg>';
+  }
 
   // ── Markdown + syntax highlighting setup ─────────────
   const LANG_ALIAS = {
@@ -415,6 +493,25 @@
     const chat = document.getElementById("chat-window");
     const id   = "stream-" + Date.now();
 
+    const welcome = chat.querySelector(".welcome");
+    if (welcome) welcome.remove();
+
+    // Loader — shown while waiting for first token
+    if (rexSpriteReady) {
+      const loader = document.createElement("div");
+      loader.className = "rex-loader";
+      loader.id        = id + "-loader";
+      loader.innerHTML =
+        '<svg width="64" height="64" viewBox="0 0 752 576"' +
+        ' xmlns="http://www.w3.org/2000/svg" aria-hidden="true"' +
+        ' style="position:absolute;top:0;left:0;color:var(--accent);opacity:0.12">' +
+        '<use href="#rex-skull"/></svg>' +
+        '<svg class="rex-loader-draw" width="64" height="64" viewBox="0 0 752 576"' +
+        ' xmlns="http://www.w3.org/2000/svg" aria-hidden="true"' +
+        ' style="color:var(--accent)"><use href="#rex-skull-outline"/></svg>';
+      chat.appendChild(loader);
+    }
+
     const wrap = document.createElement("div");
     wrap.className   = "message assistant";
     wrap.id          = id;
@@ -432,15 +529,19 @@
     bubble.appendChild(cursor);
     wrap.appendChild(bubble);
 
-    const welcome = chat.querySelector(".welcome");
-    if (welcome) welcome.remove();
-
     chat.appendChild(wrap);
     chat.scrollTop = chat.scrollHeight;
     return id;
   }
 
   function appendToStreamingBubble(id, token) {
+    // Fade out and remove loader on first token
+    const loader = document.getElementById(id + "-loader");
+    if (loader && !loader.classList.contains('hiding')) {
+      loader.classList.add('hiding');
+      loader.addEventListener('transitionend', () => loader.remove(), { once: true });
+    }
+
     const wrap = document.getElementById(id);
     if (!wrap) return;
 
@@ -455,6 +556,7 @@
   }
 
   function finalizeStreamingBubble(id, sources) {
+    document.getElementById(id + "-loader")?.remove();
     const wrap = document.getElementById(id);
     if (!wrap) return;
 
@@ -482,6 +584,7 @@
   }
 
   function removeStreamingBubble(id) {
+    document.getElementById(id + "-loader")?.remove();
     clearTimeout(debounceTimers.get(id));
     debounceTimers.delete(id);
     document.getElementById(id)?.remove();
@@ -542,6 +645,7 @@
 
   updateAccent(localStorage.getItem('rex-accent') || '#c8ff00');
   checkHealth();
+  initRexSprite();
 
   // ── Project filterable dropdown ───────────────────────
   let allProjects    = [];

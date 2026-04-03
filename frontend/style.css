@@ -280,9 +280,10 @@ body { display: flex; height: 100vh; overflow: hidden; }
 .message.system    { align-self: center; align-items: center; }
 
 .bubble {
-  padding: 14px 18px;
+  padding: 14px 18px 20px 18px;
   border-radius: var(--radius);
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
   line-height: 1.7;
   word-break: break-word;
 }
@@ -299,8 +300,6 @@ body { display: flex; height: 100vh; overflow: hidden; }
   background: var(--bg-2);
   border: 1px solid var(--border);
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 13px;
   border-bottom-left-radius: 2px;
 }
 
@@ -309,7 +308,6 @@ body { display: flex; height: 100vh; overflow: hidden; }
   border: 1px solid var(--border);
   color: var(--text-2);
   font-size: 12px;
-  font-family: var(--font-mono);
   white-space: pre-wrap;
 }
 
@@ -331,8 +329,6 @@ body { display: flex; height: 100vh; overflow: hidden; }
 
 /* ── Markdown prose (inside .md div) ─────────────────── */
 .bubble .md {
-  font-family: var(--font-mono);
-  font-size: 13px;
   line-height: 1.7;
 }
 
@@ -389,7 +385,7 @@ body { display: flex; height: 100vh; overflow: hidden; }
   margin: 0.75em 0;
   border: 1px solid var(--border-2);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow: clip;
 }
 
 /* Override Prism theme defaults to match our dark background */
@@ -648,4 +644,51 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 3px; }
 .suggestion-empty:hover {
   background: transparent;
   color: var(--text-3);
+}
+
+/* ── Sidebar logo row ─────────────────────────────────── */
+.logo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.rex-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+  transition: opacity 0.2s;
+}
+
+.rex-icon:hover { opacity: 0.65; }
+
+/* ── Rex draw-on loader ───────────────────────────────── */
+.rex-loader {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-self: center;
+  width: 64px;
+  height: 64px;
+  transition: opacity 0.3s ease;
+}
+
+.rex-loader.hiding {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rex-loader-draw {
+  stroke-dasharray: var(--rex-dash-length, 12000);
+  stroke-dashoffset: var(--rex-dash-length, 12000);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rex-loader-draw {
+    animation: rex-draw 1.5s ease-in-out infinite alternate;
+  }
+
+  @keyframes rex-draw {
+    to { stroke-dashoffset: 0; }
+  }
 }
