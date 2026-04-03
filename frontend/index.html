@@ -132,394 +132,410 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
 
   <script>
-    const API = "http://127.0.0.1:8000";
-    let sessionId    = crypto.randomUUID();
-    let currentModel = "codellama";
-    let isLoading    = false;
+  const API = "http://127.0.0.1:8000";
+  let sessionId    = crypto.randomUUID();
+  let currentModel = "codellama";
+  let isLoading    = false;
 
-    // ── Markdown + syntax highlighting setup ─────────────
-    // Language aliases: normalize LLM-generated fence names to Prism names
-    const LANG_ALIAS = {
-      js: 'javascript', ts: 'typescript', py: 'python',
-      sh: 'bash', shell: 'bash', zsh: 'bash',
-      html: 'markup', xml: 'markup', svg: 'markup',
-    };
+  // ── Markdown + syntax highlighting setup ─────────────
+  const LANG_ALIAS = {
+    js: 'javascript', ts: 'typescript', py: 'python',
+    sh: 'bash', shell: 'bash', zsh: 'bash',
+    html: 'markup', xml: 'markup', svg: 'markup',
+  };
 
-    function escapeHtml(str) {
-      return str.replace(/[&<>"']/g, c =>
-        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
+  function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
 
-    // Configure marked: custom renderer hooks Prism into every code block
-    marked.use({
-      gfm: true,
-      breaks: true,
-      renderer: {
-        code({ text, lang }) {
-          const normalized = LANG_ALIAS[lang] ?? lang ?? '';
-          const grammar    = normalized && Prism.languages[normalized];
-          const highlighted = grammar
-            ? Prism.highlight(text, grammar, normalized)
-            : escapeHtml(text);
-          const cls = normalized ? ` language-${normalized}` : '';
-          return `<pre class="language-${normalized || 'text'}"><code class="${cls}">${highlighted}</code></pre>`;
-        },
+  function guessLanguage(code) {
+    if (/^\s*(def |import |from |class |if __name__|async def )/.test(code)) return 'python';
+    if (/^\s*(function |const |let |var |=>|import \{)/.test(code))          return 'javascript';
+    if (/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)/i.test(code))   return 'sql';
+    if (/^\s*(<html|<!DOCTYPE|<div|<span|<p )/i.test(code))                  return 'markup';
+    if (/^\s*(#!\/bin\/bash|apt |pip |npm |git |cd |ls )/.test(code))        return 'bash';
+    if (/^\s*(\{|\[)/.test(code))                                             return 'json';
+    return 'text';
+  }
+
+  marked.use({
+    gfm: true,
+    breaks: true,
+    renderer: {
+      code(args) {
+        const isLegacy = typeof args === 'string';
+        const text     = isLegacy ? args : (args?.text ?? args?.raw ?? '');
+        const lang     = isLegacy ? ''   : (args?.lang ?? '');
+
+        const safeLang   = (typeof lang === 'string' ? lang : '').toLowerCase().trim();
+        const normalized = LANG_ALIAS[safeLang] ?? safeLang ?? '';
+        const safeText   = typeof text === 'string' ? text : String(text ?? '');
+        const finalLang  = normalized || guessLanguage(safeText);
+        const grammar    = finalLang && Prism.languages[finalLang];
+
+        let highlighted;
+        try {
+          highlighted = grammar
+            ? Prism.highlight(safeText, grammar, finalLang)
+            : escapeHtml(safeText);
+        } catch(e) {
+          highlighted = escapeHtml(safeText);
+        }
+
+        const cls = finalLang ? ` language-${finalLang}` : '';
+        return `<pre class="language-${finalLang || 'text'}"><code class="${cls}">${highlighted}</code></pre>`;
       },
-    });
+    },
+  });
 
-    // Per-bubble debounce timer map (cleared on finalize)
-    const debounceTimers = new Map();
+  const debounceTimers = new Map();
 
-    // Inject a "copy" button into every <pre> inside el that doesn't have one
-    function addCopyButtons(el) {
-      el.querySelectorAll('pre').forEach(pre => {
-        if (pre.querySelector('.copy-btn')) return;
-        const code = pre.querySelector('code');
-        if (!code) return;
-        const btn = document.createElement('button');
-        btn.className   = 'copy-btn';
-        btn.textContent = 'copy';
-        btn.addEventListener('click', () => {
-          navigator.clipboard.writeText(code.innerText).then(() => {
-            btn.textContent = '✓';
-            btn.classList.add('copied');
-            setTimeout(() => {
-              btn.textContent = 'copy';
-              btn.classList.remove('copied');
-            }, 1500);
-          });
+  function addCopyButtons(el) {
+    el.querySelectorAll('pre').forEach(pre => {
+      if (pre.querySelector('.copy-btn')) return;
+      const code = pre.querySelector('code');
+      if (!code) return;
+      const btn = document.createElement('button');
+      btn.className   = 'copy-btn';
+      btn.textContent = 'copy';
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(code.innerText).then(() => {
+          btn.textContent = '✓';
+          btn.classList.add('copied');
+          setTimeout(() => {
+            btn.textContent = 'copy';
+            btn.classList.remove('copied');
+          }, 1500);
         });
-        pre.appendChild(btn);
       });
+      pre.appendChild(btn);
+    });
+  }
+
+  function renderMarkdownIntoBubble(wrap) {
+    const raw = wrap.dataset.raw || '';
+    const md  = wrap.querySelector('.md');
+    if (!md || !raw) return;
+    try {
+      md.innerHTML = marked.parse(raw);
+    } catch(e) {
+      md.innerHTML = `<pre>${escapeHtml(raw)}</pre>`;
     }
+  }
 
-    // Parse raw markdown and update the .md div inside a streaming bubble
-    function renderMarkdownIntoBubble(wrap) {
-      const raw = wrap.dataset.raw || '';
-      const md  = wrap.querySelector('.md');
-      if (md) md.innerHTML = marked.parse(raw);
-    }
-
-    // ── Server health check ──────────────────────────────
-    async function checkHealth() {
-      try {
-        const res = await fetch(`${API}/health`);
-        if (res.ok) {
-          document.getElementById("server-status").textContent = "REX online";
-          document.getElementById("server-status").className = "server-status online";
-
-          // Load model names from backend
-          const mRes  = await fetch(`${API}/models`);
-          const mData = await mRes.json();
-          window.CODE_MODEL      = mData.models.code;
-          window.REASONING_MODEL = mData.models.reasoning;
-          currentModel           = window.CODE_MODEL;
-          document.getElementById("model-label").textContent = currentModel;
-        }
-      } catch {
-        document.getElementById("server-status").textContent = "REX offline";
-        document.getElementById("server-status").className = "server-status offline";
-        setTimeout(checkHealth, 3000);
+  // ── Server health check ──────────────────────────────
+  async function checkHealth() {
+    try {
+      const res = await fetch(`${API}/health`);
+      if (res.ok) {
+        document.getElementById("server-status").textContent = "REX online";
+        document.getElementById("server-status").className = "server-status online";
+        const mRes  = await fetch(`${API}/models`);
+        const mData = await mRes.json();
+        window.CODE_MODEL      = mData.models.code;
+        window.REASONING_MODEL = mData.models.reasoning;
+        currentModel           = window.CODE_MODEL;
+        document.getElementById("model-label").textContent = currentModel;
       }
+    } catch {
+      document.getElementById("server-status").textContent = "REX offline";
+      document.getElementById("server-status").className = "server-status offline";
+      setTimeout(checkHealth, 3000);
     }
+  }
 
-    // ── Model toggle ─────────────────────────────────────
-    function setModel(type) {
-      const isCode = type === "code";
-      currentModel = isCode ? window.CODE_MODEL : window.REASONING_MODEL;
-      document.getElementById("model-label").textContent = currentModel;
-      document.getElementById("btn-code").classList.toggle("active", isCode);
-      document.getElementById("btn-reasoning").classList.toggle("active", !isCode);
-    }
+  // ── Model toggle ─────────────────────────────────────
+  function setModel(type) {
+    const isCode = type === "code";
+    currentModel = isCode ? window.CODE_MODEL : window.REASONING_MODEL;
+    document.getElementById("model-label").textContent = currentModel;
+    document.getElementById("btn-code").classList.toggle("active", isCode);
+    document.getElementById("btn-reasoning").classList.toggle("active", !isCode);
+  }
 
-    // ── Ingest project ───────────────────────────────────
-    async function ingestProject() {
-      const path   = document.getElementById("project-path").value.trim();
-      const status = document.getElementById("ingest-status");
-      if (!path) { status.textContent = "Enter a project path."; return; }
+  // ── Ingest project ───────────────────────────────────
+  async function ingestProject() {
+    const path   = document.getElementById("project-path").value.trim();
+    const status = document.getElementById("ingest-status");
+    if (!path) { status.textContent = "Enter a project path."; return; }
 
-      status.textContent = "Indexing... this may take a minute.";
-      status.className   = "status-msg";
+    status.textContent = "Indexing... this may take a minute.";
+    status.className   = "status-msg";
 
-      try {
-        const res  = await fetch(`${API}/ingest`, {
-          method:  "POST",
-          headers: {"Content-Type": "application/json"},
-          body:    JSON.stringify({ project_path: path })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          status.textContent = `Done — '${data.project_name}' indexed.`;
-          status.className   = "status-msg success";
-          document.getElementById("project-name").value = data.project_name;
-        } else {
-          status.textContent = `Error: ${data.detail}`;
-          status.className   = "status-msg error";
-        }
-      } catch (e) {
-        status.textContent = "Could not reach REX server.";
+    try {
+      const res  = await fetch(`${API}/ingest`, {
+        method:  "POST",
+        headers: {"Content-Type": "application/json"},
+        body:    JSON.stringify({ project_path: path })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        status.textContent = `Done — '${data.project_name}' indexed.`;
+        status.className   = "status-msg success";
+        document.getElementById("project-name").value = data.project_name;
+      } else {
+        status.textContent = `Error: ${data.detail}`;
         status.className   = "status-msg error";
       }
+    } catch (e) {
+      status.textContent = "Could not reach REX server.";
+      status.className   = "status-msg error";
     }
+  }
 
-    // ── Send query (streaming) ───────────────────────────
-    async function sendQuery() {
-      if (isLoading) return;
+  // ── Send query (streaming) ───────────────────────────
+  async function sendQuery() {
+    if (isLoading) return;
 
-      const question = document.getElementById("question-input").value.trim();
-      const project  = document.getElementById("project-name").value.trim();
-      const nResults = parseInt(document.getElementById("n-results").value);
+    const question = document.getElementById("question-input").value.trim();
+    const project  = document.getElementById("project-name").value.trim();
+    const nResults = parseInt(document.getElementById("n-results").value);
 
-      if (!question) return;
-      if (!project)  { appendMessage("system", "Set a project name in the sidebar first."); return; }
+    if (!question) return;
+    if (!project)  { appendMessage("system", "Set a project name in the sidebar first."); return; }
 
-      appendMessage("user", question);
-      document.getElementById("question-input").value = "";
-      autoResize(document.getElementById("question-input"));
+    appendMessage("user", question);
+    document.getElementById("question-input").value = "";
+    autoResize(document.getElementById("question-input"));
 
-      isLoading = true;
-      document.getElementById("send-btn").disabled = true;
+    isLoading = true;
+    document.getElementById("send-btn").disabled = true;
 
-      const bubbleId = appendStreamingBubble();
+    const bubbleId = appendStreamingBubble();
 
-      try {
-        const res = await fetch(`${API}/stream`, {
-          method:  "POST",
-          headers: {"Content-Type": "application/json"},
-          body:    JSON.stringify({
-            question,
-            project_name: project,
-            session_id:   sessionId,
-            model:        currentModel,
-            n_results:    nResults
-          })
-        });
+    try {
+      const res = await fetch(`${API}/stream`, {
+        method:  "POST",
+        headers: {"Content-Type": "application/json"},
+        body:    JSON.stringify({
+          question,
+          project_name: project,
+          session_id:   sessionId,
+          model:        currentModel,
+          n_results:    nResults
+        })
+      });
 
-        if (!res.ok) {
-          const data = await res.json();
-          removeStreamingBubble(bubbleId);
-          appendMessage("system", `Error: ${data.detail}`);
-        } else {
-          const reader  = res.body.getReader();
-          const decoder = new TextDecoder();
-          let   sseBuffer = "";
+      if (!res.ok) {
+        const data = await res.json();
+        removeStreamingBubble(bubbleId);
+        appendMessage("system", `Error: ${data.detail}`);
+      } else {
+        const reader    = res.body.getReader();
+        const decoder   = new TextDecoder();
+        let   sseBuffer = "";
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-            sseBuffer += decoder.decode(value, { stream: true });
+          sseBuffer += decoder.decode(value, { stream: true });
 
-            // SSE events are delimited by double newlines
-            const events = sseBuffer.split("\n\n");
-            sseBuffer = events.pop(); // keep any incomplete trailing chunk
+          const events = sseBuffer.split(/\r?\n\r?\n/);
+          sseBuffer = events.pop() ?? "";
 
-            for (const block of events) {
-              if (!block.startsWith("data: ")) continue;
-              let event;
-              try { event = JSON.parse(block.slice(6)); } catch { continue; }
+          for (const block of events) {
+            const line = block.trim();
+            if (!line.startsWith("data: ")) continue;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr || jsonStr === "[DONE]") continue;
 
-              if (event.type === "token") {
-                appendToStreamingBubble(bubbleId, event.content);
-              } else if (event.type === "done") {
-                finalizeStreamingBubble(bubbleId, event.sources);
-              } else if (event.type === "error") {
-                removeStreamingBubble(bubbleId);
-                appendMessage("system", `Error: ${event.detail}`);
-              }
+            let event;
+            try { event = JSON.parse(jsonStr); } catch { continue; }
+
+            if (event.type === "token") {
+              appendToStreamingBubble(bubbleId, event.content ?? "");
+            } else if (event.type === "done") {
+              finalizeStreamingBubble(bubbleId, event.sources);
+            } else if (event.type === "error") {
+              removeStreamingBubble(bubbleId);
+              appendMessage("system", `Error: ${event.detail}`);
             }
           }
         }
-      } catch (e) {
-        removeStreamingBubble(bubbleId);
-        appendMessage("system", "Could not reach REX server.");
       }
-
-      isLoading = false;
-      document.getElementById("send-btn").disabled = false;
+    } catch (e) {
+      removeStreamingBubble(bubbleId);
+      appendMessage("system", "Could not reach REX server.");
     }
 
-    // ── Clear session ────────────────────────────────────
-    async function clearSession() {
-      await fetch(`${API}/session/${sessionId}`, { method: "DELETE" });
-      sessionId = crypto.randomUUID();
-      const chat = document.getElementById("chat-window");
-      chat.innerHTML = `
-        <div class="welcome">
-          <div class="welcome-title">Ready to explore your codebase.</div>
-          <div class="welcome-sub">Set a project name on the left, then start asking.</div>
-        </div>`;
+    isLoading = false;
+    document.getElementById("send-btn").disabled = false;
+  }
+
+  // ── Clear session ────────────────────────────────────
+  async function clearSession() {
+    await fetch(`${API}/session/${sessionId}`, { method: "DELETE" });
+    sessionId = crypto.randomUUID();
+    const chat = document.getElementById("chat-window");
+    chat.innerHTML = `
+      <div class="welcome">
+        <div class="welcome-title">Ready to explore your codebase.</div>
+        <div class="welcome-sub">Set a project name on the left, then start asking.</div>
+      </div>`;
+  }
+
+  // ── DOM helpers ──────────────────────────────────────
+  function appendMessage(role, text, sources = []) {
+    const chat = document.getElementById("chat-window");
+    const wrap = document.createElement("div");
+    wrap.className = `message ${role}`;
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+
+    if (sources && sources.length > 0) {
+      const src = document.createElement("div");
+      src.className = "sources";
+      src.innerHTML = "<span class='sources-label'>Sources</span>" +
+        sources.map(s =>
+          `<span class="source-chip">${s.filepath}:${s.start_line} <em>${s.score}</em></span>`
+        ).join("");
+      wrap.appendChild(src);
     }
 
-    // ── DOM helpers ──────────────────────────────────────
-    function appendMessage(role, text, sources = []) {
-      const chat = document.getElementById("chat-window");
-      const wrap = document.createElement("div");
-      wrap.className = `message ${role}`;
+    const welcome = chat.querySelector(".welcome");
+    if (welcome) welcome.remove();
 
-      const bubble = document.createElement("div");
-      bubble.className = "bubble";
-      bubble.textContent = text;
-      wrap.appendChild(bubble);
+    chat.appendChild(wrap);
+    chat.scrollTop = chat.scrollHeight;
+  }
 
-      if (sources && sources.length > 0) {
-        const src = document.createElement("div");
-        src.className = "sources";
-        src.innerHTML = "<span class='sources-label'>Sources</span>" +
-          sources.map(s =>
-            `<span class="source-chip">${s.filepath}:${s.start_line} <em>${s.score}</em></span>`
-          ).join("");
-        wrap.appendChild(src);
-      }
+  // ── Streaming bubble helpers ─────────────────────────
+  function appendStreamingBubble() {
+    const chat = document.getElementById("chat-window");
+    const id   = "stream-" + Date.now();
 
-      // Remove welcome message on first real message
-      const welcome = chat.querySelector(".welcome");
-      if (welcome) welcome.remove();
+    const wrap = document.createElement("div");
+    wrap.className   = "message assistant";
+    wrap.id          = id;
+    wrap.dataset.raw = "";
 
-      chat.appendChild(wrap);
-      chat.scrollTop = chat.scrollHeight;
-    }
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
 
-    // ── Streaming bubble helpers ─────────────────────────
-    function appendStreamingBubble() {
-      const chat = document.getElementById("chat-window");
-      const id   = "stream-" + Date.now();
+    const md     = document.createElement("div");
+    md.className = "md";
+    const cursor = document.createElement("span");
+    cursor.className = "stream-cursor";
 
-      const wrap = document.createElement("div");
-      wrap.className  = "message assistant";
-      wrap.id         = id;
-      wrap.dataset.raw = "";       // accumulates raw markdown tokens
+    bubble.appendChild(md);
+    bubble.appendChild(cursor);
+    wrap.appendChild(bubble);
 
-      const bubble = document.createElement("div");
-      bubble.className = "bubble";
+    const welcome = chat.querySelector(".welcome");
+    if (welcome) welcome.remove();
 
-      // .md holds the rendered markdown; cursor sits after it
-      const md     = document.createElement("div");
-      md.className = "md";
-      const cursor = document.createElement("span");
-      cursor.className = "stream-cursor";
+    chat.appendChild(wrap);
+    chat.scrollTop = chat.scrollHeight;
+    return id;
+  }
 
-      bubble.appendChild(md);
-      bubble.appendChild(cursor);
-      wrap.appendChild(bubble);
+  function appendToStreamingBubble(id, token) {
+    const wrap = document.getElementById(id);
+    if (!wrap) return;
 
-      const welcome = chat.querySelector(".welcome");
-      if (welcome) welcome.remove();
+    wrap.dataset.raw += token;
 
-      chat.appendChild(wrap);
-      chat.scrollTop = chat.scrollHeight;
-      return id;
-    }
-
-    function appendToStreamingBubble(id, token) {
-      const wrap = document.getElementById(id);
-      if (!wrap) return;
-
-      wrap.dataset.raw += token;
-
-      // Debounce the re-render: 80 ms gives fluid-feeling updates
-      // without hammering the DOM on every single token
-      clearTimeout(debounceTimers.get(id));
-      debounceTimers.set(id, setTimeout(() => {
-        renderMarkdownIntoBubble(wrap);
-        document.getElementById("chat-window").scrollTop =
-          document.getElementById("chat-window").scrollHeight;
-      }, 80));
-    }
-
-    function finalizeStreamingBubble(id, sources) {
-      const wrap = document.getElementById(id);
-      if (!wrap) return;
-
-      // Cancel any pending debounce and do one authoritative final render
-      clearTimeout(debounceTimers.get(id));
-      debounceTimers.delete(id);
-
+    clearTimeout(debounceTimers.get(id));
+    debounceTimers.set(id, setTimeout(() => {
       renderMarkdownIntoBubble(wrap);
-
-      const bubble = wrap.querySelector(".bubble");
-      // Copy buttons only make sense on the finished response
-      addCopyButtons(bubble.querySelector(".md"));
-      // Remove blinking cursor
-      bubble.querySelector(".stream-cursor")?.remove();
-
-      if (sources && sources.length > 0) {
-        const src = document.createElement("div");
-        src.className = "sources";
-        src.innerHTML = "<span class='sources-label'>Sources</span>" +
-          sources.map(s =>
-            `<span class="source-chip">${s.filepath}:${s.start_line} <em>${s.score}</em></span>`
-          ).join("");
-        wrap.appendChild(src);
-      }
-
       document.getElementById("chat-window").scrollTop =
         document.getElementById("chat-window").scrollHeight;
+    }, 16));
+  }
+
+  function finalizeStreamingBubble(id, sources) {
+    const wrap = document.getElementById(id);
+    if (!wrap) return;
+
+    clearTimeout(debounceTimers.get(id));
+    debounceTimers.delete(id);
+
+    renderMarkdownIntoBubble(wrap);
+
+    const bubble = wrap.querySelector(".bubble");
+    addCopyButtons(bubble.querySelector(".md"));
+    bubble.querySelector(".stream-cursor")?.remove();
+
+    if (sources && sources.length > 0) {
+      const src = document.createElement("div");
+      src.className = "sources";
+      src.innerHTML = "<span class='sources-label'>Sources</span>" +
+        sources.map(s =>
+          `<span class="source-chip">${s.filepath}:${s.start_line} <em>${s.score}</em></span>`
+        ).join("");
+      wrap.appendChild(src);
     }
 
-    function removeStreamingBubble(id) {
-      clearTimeout(debounceTimers.get(id));
-      debounceTimers.delete(id);
-      document.getElementById(id)?.remove();
-    }
+    document.getElementById("chat-window").scrollTop =
+      document.getElementById("chat-window").scrollHeight;
+  }
 
-    function handleKey(e) {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendQuery();
+  function removeStreamingBubble(id) {
+    clearTimeout(debounceTimers.get(id));
+    debounceTimers.delete(id);
+    document.getElementById(id)?.remove();
+  }
+
+  function handleKey(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendQuery();
+    }
+  }
+
+  function autoResize(el) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }
+
+  // ── Accent colour ────────────────────────────────────
+  function hexToHsl(hex) {
+    let r = parseInt(hex.slice(1,3),16)/255;
+    let g = parseInt(hex.slice(3,5),16)/255;
+    let b = parseInt(hex.slice(5,7),16)/255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b);
+    let h = 0, s = 0, l = (max+min)/2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+      switch(max) {
+        case r: h = ((g-b)/d + (g<b?6:0))/6; break;
+        case g: h = ((b-r)/d + 2)/6; break;
+        case b: h = ((r-g)/d + 4)/6; break;
       }
     }
+    return [h*360, s*100, l*100];
+  }
 
-    function autoResize(el) {
-      el.style.height = "auto";
-      el.style.height = Math.min(el.scrollHeight, 160) + "px";
-    }
+  function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    const a = s * Math.min(l, 1-l);
+    const f = n => {
+      const k = (n + h/30) % 12;
+      return Math.round(255*(l - a*Math.max(Math.min(k-3,9-k,1),-1)))
+        .toString(16).padStart(2,'0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  }
 
-    // ── Accent colour ────────────────────────────────────
-    function hexToHsl(hex) {
-      let r = parseInt(hex.slice(1,3),16)/255;
-      let g = parseInt(hex.slice(3,5),16)/255;
-      let b = parseInt(hex.slice(5,7),16)/255;
-      const max = Math.max(r,g,b), min = Math.min(r,g,b);
-      let h = 0, s = 0, l = (max+min)/2;
-      if (max !== min) {
-        const d = max - min;
-        s = l > 0.5 ? d/(2-max-min) : d/(max+min);
-        switch(max) {
-          case r: h = ((g-b)/d + (g<b?6:0))/6; break;
-          case g: h = ((b-r)/d + 2)/6; break;
-          case b: h = ((r-g)/d + 4)/6; break;
-        }
-      }
-      return [h*360, s*100, l*100];
-    }
+  function updateAccent(hex) {
+    const [h, s, l] = hexToHsl(hex);
+    const dimHex = hslToHex(h, s, Math.max(5, l * 0.62));
+    document.documentElement.style.setProperty('--accent', hex);
+    document.documentElement.style.setProperty('--accent-dim', dimHex);
+    document.getElementById('accent-picker').value = hex;
+    document.getElementById('dim-swatch').style.background = dimHex;
+    document.getElementById('dim-hex').textContent = `dim → ${dimHex}`;
+    localStorage.setItem('rex-accent', hex);
+  }
 
-    function hslToHex(h, s, l) {
-      s /= 100; l /= 100;
-      const a = s * Math.min(l, 1-l);
-      const f = n => {
-        const k = (n + h/30) % 12;
-        return Math.round(255*(l - a*Math.max(Math.min(k-3,9-k,1),-1)))
-          .toString(16).padStart(2,'0');
-      };
-      return `#${f(0)}${f(8)}${f(4)}`;
-    }
-
-    function updateAccent(hex) {
-      const [h, s, l] = hexToHsl(hex);
-      const dimHex = hslToHex(h, s, Math.max(5, l * 0.62));
-      document.documentElement.style.setProperty('--accent', hex);
-      document.documentElement.style.setProperty('--accent-dim', dimHex);
-      document.getElementById('accent-picker').value = hex;
-      document.getElementById('dim-swatch').style.background = dimHex;
-      document.getElementById('dim-hex').textContent = `dim → ${dimHex}`;
-      localStorage.setItem('rex-accent', hex);
-    }
-
-    // Restore saved accent on load
-    updateAccent(localStorage.getItem('rex-accent') || '#c8ff00');
-
-    checkHealth();
-  </script>
+  updateAccent(localStorage.getItem('rex-accent') || '#c8ff00');
+  checkHealth();
+</script>
 </body>
 </html>

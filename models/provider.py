@@ -1,4 +1,4 @@
-# models/ollama_provider.py
+# models/provider.py
 from abc import ABC, abstractmethod
 from typing import Iterator
 import ollama
