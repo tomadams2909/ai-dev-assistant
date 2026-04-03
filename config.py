@@ -3,11 +3,8 @@ from pathlib import Path
 # ── Model settings ────────────────────────────────────────────────
 PROVIDER         = "ollama"
 EMBEDDING_MODEL  = "nomic-embed-text"
-CODE_MODEL       = "codellama"   # used for code explanation and analysis
-REASONING_MODEL  = "llama3"      # used for broader reasoning and conversation
-
-# Default — orchestrator uses this unless told otherwise
-CHAT_MODEL = CODE_MODEL
+CODE_MODEL       = "qwen2.5-coder:7b"   # used for code explanation and analysis
+REASONING_MODEL  = "deepseek-r1:7b"     # used for broader reasoning and conversation
 
 # ── Project index store ───────────────────────────────────────────
 REX_HOME     = Path.home() / ".rex"
@@ -15,8 +12,14 @@ VECTOR_STORE = REX_HOME / "vector_store"
 REX_HOME.mkdir(exist_ok=True)
 VECTOR_STORE.mkdir(exist_ok=True)
 
+# ── Memory / session settings ─────────────────────────────────────
+MAX_HISTORY_MESSAGES  = 20   # rolling window kept in session.history
+SUMMARY_KEEP_MESSAGES = 10    # messages retained when compressing to summary
+SESSION_STORE         = REX_HOME / "sessions"
+SESSION_STORE.mkdir(exist_ok=True)
+
 # ── File access rules ─────────────────────────────────────────────
-ALLOWED_EXTENSIONS = {".py", ".js", ".ts", ".sql", ".md", ".yaml", ".json", ".txt", ".html", ".css"}
+ALLOWED_EXTENSIONS = {".py", ".js", ".ts", ".sql", ".md", ".yaml", ".json", ".txt", ".html"}
 EXCLUDED_DIRS      = {".git", "__pycache__", "node_modules", ".venv", "dist", "build"}
 EXCLUDED_FILES     = {".env", ".env.local", "secrets.yaml", "secrets.json"}
 

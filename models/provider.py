@@ -84,11 +84,11 @@ class OpenAIProvider(ModelProvider):
 def get_provider(name: str = PROVIDER, model: str = CODE_MODEL) -> ModelProvider:
     """
     Get a model provider by name.
-    Pass model=REASONING_MODEL to switch to llama3 for broader tasks.
+    Pass model=REASONING_MODEL to switch to deepseek-r1:7b for broader tasks.
 
     Usage:
-        provider = get_provider()                            # codellama default
-        provider = get_provider(model=REASONING_MODEL)      # llama3
+        provider = get_provider()                            # qwen2.5-coder:7b default
+        provider = get_provider(model=REASONING_MODEL)      # deepseek-r1:7b
     """
     providers = {
         "ollama": lambda: OllamaProvider(chat_model=model),
