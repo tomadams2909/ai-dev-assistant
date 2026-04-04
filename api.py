@@ -4,6 +4,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.staticfiles import StaticFiles as StarletteStaticFiles
+from starlette.types import Scope, Receive, Send
 from pydantic import BaseModel
 import uvicorn
 from pathlib import Path
@@ -22,9 +24,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── No-cache static files for development ─────────────────────────
+class NoCacheStaticFiles(StarletteStaticFiles):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                headers[b"cache-control"] = b"no-cache, no-store, must-revalidate"
+                headers[b"pragma"]        = b"no-cache"
+                headers[b"expires"]       = b"0"
+                message["headers"] = list(headers.items())
+            await send(message)
+        await super().__call__(scope, receive, send_with_headers)
+
 # ── Serve frontend static files ───────────────────────────────────
 BASE_DIR = Path(__file__).parent
-app.mount("/app", StaticFiles(directory=BASE_DIR / "frontend", html=True), name="frontend")
+app.mount("/app", NoCacheStaticFiles(directory=BASE_DIR / "frontend", html=True), name="frontend")
 
 # ── Session store ─────────────────────────────────────────────────
 # In-memory cache; sessions are always persisted to disk so they
