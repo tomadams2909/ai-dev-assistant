@@ -11,6 +11,7 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
+.pytest_cache/
 
 # Models (never commit these, they're gigabytes)
 *.gguf

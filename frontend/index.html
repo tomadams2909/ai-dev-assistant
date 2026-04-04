@@ -80,7 +80,7 @@
       <div id="review-status" class="status-msg"></div>
     </div>
 
-    <div class="sidebar-section">
+    <div id="model-section" class="sidebar-section">
       <label class="field-label">Model</label>
       <div class="model-toggle">
         <button id="btn-code" class="model-btn active" onclick="setModel('code')">
@@ -91,6 +91,33 @@
         </button>
       </div>
       <span id="model-label" class="model-label">codellama</span>
+    </div>
+
+    <!-- ── External providers ─────────────────────────── -->
+    <!-- Designed to grow: Phase 5 will add Groq, Gemini, DeepSeek rows here -->
+    <div class="sidebar-section providers-section">
+      <label class="field-label">External providers</label>
+      <div class="provider-list" id="provider-list">
+
+        <!-- Claude / God Mode row -->
+        <div class="provider-row" id="provider-row-claude">
+          <div class="provider-info">
+            <span class="provider-name">Claude</span>
+            <span class="provider-model-label">Sonnet 4.6</span>
+          </div>
+          <button
+            id="god-mode-btn"
+            class="god-mode-btn"
+            onclick="toggleGodMode()"
+            title=""
+          >God Mode</button>
+        </div>
+
+      </div>
+      <div id="god-mode-warning" class="god-mode-warning" hidden>
+        God Mode uses your Anthropic API credits
+        <button class="warning-dismiss" onclick="dismissGodModeWarning()" aria-label="Dismiss">×</button>
+      </div>
     </div>
 
     <div class="sidebar-section">
@@ -119,6 +146,16 @@
         <span class="dim-swatch" id="dim-swatch"></span>
         <span class="dim-hex" id="dim-hex"></span>
       </div>
+    </div>
+
+    <!-- ── Claude usage panel (visible once God Mode has been used) ── -->
+    <div id="usage-panel" class="sidebar-section usage-panel" hidden>
+      <label class="field-label">Claude usage</label>
+      <div class="usage-stats">
+        <span class="usage-tokens" id="usage-tokens">0 tokens</span>
+        <span class="usage-cost"   id="usage-cost">$0.0000</span>
+      </div>
+      <button class="usage-reset" onclick="resetUsage()">Reset</button>
     </div>
 
     <div class="sidebar-footer">
@@ -580,6 +617,8 @@
 
     document.getElementById("chat-window").scrollTop =
       document.getElementById("chat-window").scrollHeight;
+
+    if (godModeActive) refreshUsage();
   }
 
   // ── Sidebar review trigger ───────────────────────────
@@ -741,6 +780,8 @@
 
     document.getElementById("chat-window").scrollTop =
       document.getElementById("chat-window").scrollHeight;
+
+    if (godModeActive) refreshUsage();
   }
 
   function removeStreamingBubble(id) {
@@ -806,6 +847,8 @@
   updateAccent(localStorage.getItem('rex-accent') || '#c8ff00');
   checkHealth();
   initRexSprite();
+  checkGodModeStatus();
+  refreshUsage();
 
   // ── Project filterable dropdown ───────────────────────
   let allProjects    = [];
@@ -1005,7 +1048,103 @@
     });
   })();
 
-  // Close on click outside either dropdown
+  // ── God Mode ─────────────────────────────────────────
+  let godModeActive        = false;
+  let godModeAvailable     = false;
+  let godModeWarningShown  = false;
+  let localModelBeforeGod  = null;   // remembers which local model was active
+
+  async function checkGodModeStatus() {
+    try {
+      const res  = await fetch(`${API}/god-mode/status`);
+      if (!res.ok) return;
+      const data = await res.json();
+      godModeAvailable       = data.available;
+      window.CLAUDE_MODEL    = data.model;
+      const btn              = document.getElementById('god-mode-btn');
+      if (!godModeAvailable) {
+        btn.disabled   = true;
+        btn.title      = 'Add ANTHROPIC_API_KEY to .env to enable';
+      } else {
+        btn.disabled   = false;
+        btn.title      = '';
+      }
+    } catch { /* server offline — no-op */ }
+  }
+
+  function toggleGodMode() {
+    if (!godModeAvailable) return;
+    godModeActive = !godModeActive;
+
+    const btn         = document.getElementById('god-mode-btn');
+    const modelSection = document.getElementById('model-section');
+
+    if (godModeActive) {
+      // Remember the current local model so we can restore it later
+      localModelBeforeGod = currentModel;
+      currentModel        = window.CLAUDE_MODEL;
+
+      btn.classList.add('active');
+      modelSection.classList.add('god-mode-active');
+      document.getElementById('model-label').textContent = 'Claude Sonnet 4.6';
+
+      // One-time per-session warning
+      if (!godModeWarningShown) {
+        document.getElementById('god-mode-warning').hidden = false;
+        godModeWarningShown = true;
+      }
+    } else {
+      // Restore the previously selected local model
+      currentModel = localModelBeforeGod || window.CODE_MODEL;
+      localModelBeforeGod = null;
+
+      btn.classList.remove('active');
+      modelSection.classList.remove('god-mode-active');
+
+      // Update the model label to reflect the restored local model
+      const isCode = currentModel === window.CODE_MODEL;
+      document.getElementById('model-label').textContent = currentModel;
+      document.getElementById('btn-code').classList.toggle('active', isCode);
+      document.getElementById('btn-reasoning').classList.toggle('active', !isCode);
+    }
+  }
+
+  function dismissGodModeWarning() {
+    document.getElementById('god-mode-warning').classList.add('hidden');
+  }
+
+  // ── Usage panel ───────────────────────────────────────
+  async function refreshUsage() {
+    try {
+      const res  = await fetch(`${API}/usage`);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const totalTokens = (data.total_input_tokens || 0) + (data.total_output_tokens || 0);
+      const cost        = (data.estimated_cost_usd || 0).toFixed(4);
+
+      document.getElementById('usage-tokens').textContent =
+        totalTokens.toLocaleString() + ' tokens';
+      document.getElementById('usage-cost').textContent = '$' + cost;
+
+      if ((data.total_requests || 0) > 0) {
+        document.getElementById('usage-panel').hidden = false;
+      }
+    } catch { /* server offline — no-op */ }
+  }
+
+  async function resetUsage() {
+    try {
+      const res  = await fetch(`${API}/usage/reset`, { method: 'POST' });
+      if (!res.ok) return;
+      const data = await res.json();
+      document.getElementById('usage-tokens').textContent = '0 tokens';
+      document.getElementById('usage-cost').textContent   = '$0.0000';
+      document.getElementById('usage-panel').hidden        = true;
+    } catch { /* no-op */ }
+  }
+
+  // ── Close on click outside either dropdown
   document.addEventListener('click', e => {
     if (!document.getElementById('project-dropdown').contains(e.target)) {
       closeSuggestions();

@@ -1,8 +1,9 @@
 # models/provider.py
+import os
 from abc import ABC, abstractmethod
 from typing import Iterator
 import ollama
-from config import CODE_MODEL, REASONING_MODEL, EMBEDDING_MODEL, PROVIDER
+from config import CODE_MODEL, REASONING_MODEL, EMBEDDING_MODEL, PROVIDER, CLAUDE_MODEL
 
 
 # ── Base class ────────────────────────────────────────────────────
@@ -79,23 +80,64 @@ class OllamaProvider(ModelProvider):
         return response["embedding"]
 
 
-# ── Future providers (not yet implemented) ────────────────────────
+# ── Anthropic Claude (God Mode) ───────────────────────────────────
 class ClaudeProvider(ModelProvider):
-    """Anthropic Claude via API — plug in later for heavier tasks."""
+    """
+    Anthropic Claude Sonnet via the Anthropic API.
+    Requires ANTHROPIC_API_KEY in environment.
+    Embeddings always fall back to local Ollama — Claude has no embedding endpoint.
+    """
+
+    def __init__(self):
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is not set. "
+                "Add ANTHROPIC_API_KEY=your-key-here to your .env file to enable God Mode."
+            )
+        import anthropic
+        self._client = anthropic.Anthropic(api_key=api_key)
+        self._model  = CLAUDE_MODEL
 
     def chat(self, system: str, messages: list[dict]) -> str:
-        raise NotImplementedError("Claude provider not yet configured.")
+        from usage_tracker import track_usage
+        response = self._client.messages.create(
+            model=self._model,
+            max_tokens=4096,
+            system=system,
+            messages=messages,
+        )
+        track_usage(response.usage.input_tokens, response.usage.output_tokens)
+        return response.content[0].text
 
     def chat_stream(self, system: str, messages: list[dict]) -> Iterator[str]:
-        raise NotImplementedError("Claude provider not yet configured.")
-        yield  # make static analysis happy
+        from usage_tracker import track_usage
+        final_message = None
+        with self._client.messages.stream(
+            model=self._model,
+            max_tokens=4096,
+            system=system,
+            messages=messages,
+        ) as stream:
+            for text in stream.text_stream:
+                yield text
+            final_message = stream.get_final_message()
+        if final_message is not None:
+            track_usage(
+                final_message.usage.input_tokens,
+                final_message.usage.output_tokens,
+            )
 
     def embed(self, text: str) -> list[float]:
-        raise NotImplementedError("Claude provider not yet configured.")
+        raise NotImplementedError(
+            "Claude has no embedding endpoint. "
+            "Embeddings always use local Ollama regardless of God Mode."
+        )
 
 
+# ── Future providers ──────────────────────────────────────────────
 class OpenAIProvider(ModelProvider):
-    """OpenAI via API — plug in later as alternative."""
+    """OpenAI via API — placeholder for Phase 5."""
 
     def chat(self, system: str, messages: list[dict]) -> str:
         raise NotImplementedError("OpenAI provider not yet configured.")
@@ -112,16 +154,26 @@ class OpenAIProvider(ModelProvider):
 def get_provider(name: str = PROVIDER, model: str = CODE_MODEL) -> ModelProvider:
     """
     Get a model provider by name.
-    Pass model=REASONING_MODEL to switch to deepseek-r1:7b for broader tasks.
+
+    When model == CLAUDE_MODEL the request is automatically routed to
+    ClaudeProvider regardless of the name argument.  This lets the
+    orchestrator stay unaware of external providers — it just passes
+    the model string through and this factory does the routing.
 
     Usage:
-        provider = get_provider()                            # qwen2.5-coder:7b default
-        provider = get_provider(model=REASONING_MODEL)      # deepseek-r1:7b
+        get_provider()                          # default local Ollama
+        get_provider(model=REASONING_MODEL)     # local Ollama deepseek-r1
+        get_provider(model=CLAUDE_MODEL)        # Claude Sonnet (God Mode)
     """
+    # Auto-route to Claude when the Claude model is requested
+    if model == CLAUDE_MODEL:
+        # Raises RuntimeError with a clear message if API key is absent
+        return ClaudeProvider()
+
     providers = {
         "ollama": lambda: OllamaProvider(chat_model=model),
-        "claude": ClaudeProvider,
-        "openai": OpenAIProvider,
+        "claude": lambda: ClaudeProvider(),
+        "openai": lambda: OpenAIProvider(),
     }
 
     if name not in providers:

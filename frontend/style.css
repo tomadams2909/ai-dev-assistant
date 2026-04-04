@@ -12,6 +12,7 @@
   --accent:     #c8ff00;
   --accent-dim: #8aad00;
   --red:        #ff4444;
+  --warning:    #ffb84d;
   --radius:     6px;
   --font-ui:    'Syne', sans-serif;
   --font-mono:  'JetBrains Mono', monospace;
@@ -249,6 +250,10 @@ body { display: flex; height: 100vh; overflow: hidden; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.hidden {
+  display: none !important;
 }
 
 /* ── Chat window ──────────────────────────────────────── */
@@ -681,6 +686,160 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 3px; }
 }
 
 .rex-icon:hover { opacity: 0.65; }
+
+/* ── External providers section ──────────────────────── */
+.providers-section {
+  background: var(--bg);          /* slightly darker than sidebar --bg-2 */
+  border-top: 1px solid var(--border);
+}
+
+.provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.provider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.provider-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.provider-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.provider-model-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+/* ── God Mode button ──────────────────────────────────── */
+.god-mode-btn {
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.god-mode-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Active state — accent border + subtle fill to read as "external/premium" */
+.god-mode-btn.active {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-3));
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent) inset;
+}
+
+/* Disabled state — key not configured */
+.god-mode-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* When God Mode is active: dim (but preserve) the local model toggle */
+#model-section.god-mode-active .model-toggle {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* ── God Mode one-time warning pill ───────────────────── */
+.god-mode-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-3));
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+  border-radius: var(--radius);
+  color: var(--warning);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 7px 10px;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.warning-dismiss {
+  background: none;
+  border: none;
+  color: var(--warning);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+  padding: 0 2px;
+  flex-shrink: 0;
+  transition: opacity 0.12s;
+}
+
+.warning-dismiss:hover { opacity: 1; }
+
+/* ── Claude usage panel ───────────────────────────────── */
+.usage-panel {
+  gap: 10px;
+}
+
+.usage-stats {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.usage-tokens {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.usage-cost {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.usage-reset {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 0;
+  text-transform: uppercase;
+  transition: color 0.12s;
+}
+
+.usage-reset:hover { color: var(--text-2); }
 
 /* ── Rex draw-on loader ───────────────────────────────── */
 .rex-loader {

@@ -6,6 +6,10 @@ EMBEDDING_MODEL  = "nomic-embed-text"
 CODE_MODEL       = "qwen2.5-coder:7b"   # used for code explanation and analysis
 REASONING_MODEL  = "deepseek-r1:7b"     # used for broader reasoning and conversation
 
+# ── External provider settings ────────────────────────────────────
+CLAUDE_MODEL      = "claude-sonnet-4-6"
+GOD_MODE_PROVIDER = "claude"
+
 # ── Project index store ───────────────────────────────────────────
 REX_HOME     = Path.home() / ".rex"
 VECTOR_STORE = REX_HOME / "vector_store"
@@ -20,7 +24,11 @@ SESSION_STORE.mkdir(exist_ok=True)
 
 # ── File access rules ─────────────────────────────────────────────
 ALLOWED_EXTENSIONS = {".py", ".js", ".ts", ".sql", ".md", ".yaml", ".json", ".txt", ".html"}
-EXCLUDED_DIRS      = {".git", "__pycache__", "node_modules", ".venv", "dist", "build"}
+EXCLUDED_DIRS = {
+    ".git", "__pycache__", "node_modules", ".venv", "dist", "build",
+    ".pytest_cache", ".mypy_cache", ".ruff_cache", "coverage",
+    ".next", ".nuxt", "target", ".gradle"
+}
 EXCLUDED_FILES     = {".env", ".env.local", "secrets.yaml", "secrets.json"}
 
 def is_allowed(path: Path) -> bool:

@@ -1,5 +1,12 @@
 # api.py
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import json
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,7 +18,8 @@ import uvicorn
 from pathlib import Path
 from orchestrator import query, query_stream, review_file_stream, _prepare_review
 from ingest import ingest
-from config import CODE_MODEL, REASONING_MODEL, PROVIDER, VECTOR_STORE
+from config import CODE_MODEL, REASONING_MODEL, PROVIDER, VECTOR_STORE, CLAUDE_MODEL
+from usage_tracker import get_usage, reset_usage
 from memory import Session, new_session, load_session, list_sessions, delete_session
 
 app = FastAPI(title="REX — Repository Engineering eXpert")
@@ -166,7 +174,7 @@ def query_project(request: QueryRequest):
     Ask a question about an indexed project.
     Maintains conversation history per session_id across restarts.
     """
-    allowed_models = {CODE_MODEL, REASONING_MODEL}
+    allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL}
     if request.model not in allowed_models:
         raise HTTPException(
             status_code=400,
@@ -224,11 +232,18 @@ def stream_query(request: StreamRequest):
 
     The existing /query endpoint is unchanged.
     """
-    allowed_models = {CODE_MODEL, REASONING_MODEL}
+    allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL}
     if request.model not in allowed_models:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid model. Choose from: {allowed_models}"
+        )
+
+    # Pre-check: fail fast with 503 if God Mode key is missing
+    if request.model == CLAUDE_MODEL and not os.environ.get("ANTHROPIC_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="ANTHROPIC_API_KEY is not set. Add it to your .env file to enable God Mode.",
         )
 
     # Load session: memory cache → disk → create new
@@ -289,11 +304,18 @@ def review_file_endpoint(request: ReviewRequest):
       {"type": "review_done", "session_id": "..."}   — stream finished
       {"type": "error",       "detail": "<msg>"}     — something went wrong
     """
-    allowed_models = {CODE_MODEL, REASONING_MODEL}
+    allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL}
     if request.model not in allowed_models:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid model. Choose from: {allowed_models}"
+        )
+
+    # Pre-check: fail fast with 503 if God Mode key is missing
+    if request.model == CLAUDE_MODEL and not os.environ.get("ANTHROPIC_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="ANTHROPIC_API_KEY is not set. Add it to your .env file to enable God Mode.",
         )
 
     session = sessions.get(request.session_id)
@@ -331,6 +353,27 @@ def review_file_endpoint(request: ReviewRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.get("/god-mode/status")
+def god_mode_status():
+    """Check whether God Mode (Claude) is available in this environment."""
+    return {
+        "available": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "model":     CLAUDE_MODEL,
+    }
+
+
+@app.get("/usage")
+def usage_stats():
+    """Return cumulative Claude token usage and estimated cost."""
+    return get_usage()
+
+
+@app.post("/usage/reset")
+def usage_reset():
+    """Zero out the Claude usage file and return the reset record."""
+    return reset_usage()
 
 
 @app.delete("/session/{session_id}")
