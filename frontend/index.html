@@ -63,6 +63,24 @@
     </div>
 
     <div class="sidebar-section">
+      <label class="field-label">Review a file</label>
+      <div class="project-dropdown" id="review-dropdown">
+        <input
+          id="review-filepath"
+          class="field-input"
+          type="text"
+          placeholder="e.g. config.py or src/auth.py"
+          autocomplete="off"
+        />
+        <ul class="project-suggestions" id="review-suggestions" hidden></ul>
+      </div>
+      <button class="btn-ingest" onclick="reviewFromSidebar()">
+        Review
+      </button>
+      <div id="review-status" class="status-msg"></div>
+    </div>
+
+    <div class="sidebar-section">
       <label class="field-label">Model</label>
       <div class="model-toggle">
         <button id="btn-code" class="model-btn active" onclick="setModel('code')">
@@ -370,6 +388,7 @@
         status.className   = "status-msg success";
         document.getElementById("project-name").value = data.project_name;
         await loadProjects();
+        await loadFiles(data.project_name);
       } else {
         status.textContent = `Error: ${data.detail}`;
         status.className   = "status-msg error";
@@ -478,7 +497,7 @@
     const bubbleId = appendStreamingBubble();
 
     try {
-      const res  = await fetch(`${API}/review`, {
+      const res = await fetch(`${API}/review`, {
         method:  "POST",
         headers: {"Content-Type": "application/json"},
         body:    JSON.stringify({
@@ -488,12 +507,44 @@
           model:        currentModel,
         })
       });
-      const data = await res.json();
+
       if (!res.ok) {
+        const data = await res.json();
         removeStreamingBubble(bubbleId);
         appendMessage("system", `Error: ${data.detail}`);
       } else {
-        finalizeReviewBubble(bubbleId, data.answer);
+        const reader    = res.body.getReader();
+        const decoder   = new TextDecoder();
+        let   sseBuffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          sseBuffer += decoder.decode(value, { stream: true });
+
+          const events = sseBuffer.split(/\r?\n\r?\n/);
+          sseBuffer = events.pop() ?? "";
+
+          for (const block of events) {
+            const line = block.trim();
+            if (!line.startsWith("data: ")) continue;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr || jsonStr === "[DONE]") continue;
+
+            let event;
+            try { event = JSON.parse(jsonStr); } catch { continue; }
+
+            if (event.type === "token") {
+              appendToStreamingBubble(bubbleId, event.content ?? "");
+            } else if (event.type === "review_done") {
+              finalizeReviewBubble(bubbleId);
+            } else if (event.type === "error") {
+              removeStreamingBubble(bubbleId);
+              appendMessage("system", `Error: ${event.detail}`);
+            }
+          }
+        }
       }
     } catch (e) {
       removeStreamingBubble(bubbleId);
@@ -504,12 +555,17 @@
     document.getElementById("send-btn").disabled = false;
   }
 
-  function finalizeReviewBubble(id, answer) {
+  function finalizeReviewBubble(id) {
+    // Loader is already faded by appendToStreamingBubble on the first token;
+    // remove it directly here in case no tokens arrived (error path).
     document.getElementById(id + "-loader")?.remove();
+
     const wrap = document.getElementById(id);
     if (!wrap) return;
 
-    wrap.dataset.raw = answer;
+    clearTimeout(debounceTimers.get(id));
+    debounceTimers.delete(id);
+
     renderMarkdownIntoBubble(wrap);
 
     const bubble = wrap.querySelector(".bubble");
@@ -524,6 +580,32 @@
 
     document.getElementById("chat-window").scrollTop =
       document.getElementById("chat-window").scrollHeight;
+  }
+
+  // ── Sidebar review trigger ───────────────────────────
+  function reviewFromSidebar() {
+    const filepath = document.getElementById("review-filepath").value.trim();
+    const project  = document.getElementById("project-name").value.trim();
+    const status   = document.getElementById("review-status");
+
+    if (!project) {
+      status.textContent = "No project selected.";
+      status.className   = "status-msg error";
+      return;
+    }
+    if (!filepath) {
+      status.textContent = "Enter a file path.";
+      status.className   = "status-msg error";
+      return;
+    }
+
+    status.textContent = "";
+    status.className   = "status-msg";
+
+    closeFileSuggestions();
+    appendMessage("user", `review ${filepath}`);
+    document.getElementById("review-filepath").value = "";
+    sendReview(filepath);
   }
 
   // ── Clear session ────────────────────────────────────
@@ -773,6 +855,7 @@
     document.getElementById('project-suggestions').hidden = true;
     document.getElementById('project-dropdown').classList.remove('open');
     suggestionIdx = -1;
+    loadFiles(name);
   }
 
   function closeSuggestions() {
@@ -780,6 +863,101 @@
     document.getElementById('project-dropdown').classList.remove('open');
     suggestionIdx = -1;
   }
+
+  // ── File suggestions for review dropdown ─────────────
+  let allFiles    = [];
+  let fileSuggIdx = -1;
+
+  async function loadFiles(projectName) {
+    if (!projectName) { allFiles = []; return; }
+    try {
+      const res = await fetch(`${API}/files?project_name=${encodeURIComponent(projectName)}`);
+      allFiles  = res.ok ? (await res.json()).files || [] : [];
+    } catch { allFiles = []; }
+  }
+
+  function renderFileSuggestions(filter) {
+    const list     = document.getElementById('review-suggestions');
+    const filtered = (filter && filter.trim())
+      ? allFiles.filter(f => f.toLowerCase().includes(filter.toLowerCase()))
+      : allFiles;
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<li class="suggestion-item suggestion-empty">No results</li>';
+      list.hidden = false;
+      document.getElementById('review-dropdown').classList.add('open');
+      return;
+    }
+
+    list.innerHTML = filtered.map(f =>
+      `<li class="suggestion-item" data-name="${escapeHtml(f)}">${escapeHtml(f)}</li>`
+    ).join('');
+
+    list.querySelectorAll('.suggestion-item').forEach(li => {
+      li.addEventListener('mousedown', e => {
+        e.preventDefault();
+        selectFile(li.dataset.name);
+      });
+    });
+
+    fileSuggIdx = -1;
+    list.hidden = false;
+    document.getElementById('review-dropdown').classList.add('open');
+  }
+
+  function selectFile(name) {
+    document.getElementById('review-filepath').value = name;
+    document.getElementById('review-suggestions').hidden = true;
+    document.getElementById('review-dropdown').classList.remove('open');
+    fileSuggIdx = -1;
+  }
+
+  function closeFileSuggestions() {
+    document.getElementById('review-suggestions').hidden = true;
+    document.getElementById('review-dropdown').classList.remove('open');
+    fileSuggIdx = -1;
+  }
+
+  // Wire up review-filepath events
+  (function () {
+    const input = document.getElementById('review-filepath');
+    const list  = document.getElementById('review-suggestions');
+
+    input.addEventListener('focus', () => {
+      renderFileSuggestions(input.value);
+    });
+
+    input.addEventListener('input', () => {
+      renderFileSuggestions(input.value);
+    });
+
+    input.addEventListener('keydown', e => {
+      if (list.hidden) return;
+      const items = list.querySelectorAll('.suggestion-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        fileSuggIdx = Math.min(fileSuggIdx + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle('active', i === fileSuggIdx));
+        items[fileSuggIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        fileSuggIdx = Math.max(fileSuggIdx - 1, -1);
+        items.forEach((el, i) => el.classList.toggle('active', i === fileSuggIdx));
+        if (fileSuggIdx >= 0) items[fileSuggIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        if (fileSuggIdx >= 0 && items[fileSuggIdx]) {
+          e.preventDefault();
+          selectFile(items[fileSuggIdx].dataset.name);
+        }
+      } else if (e.key === 'Escape') {
+        closeFileSuggestions();
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      setTimeout(closeFileSuggestions, 150);
+    });
+  })();
 
   // Wire up input events
   (function () {
@@ -819,14 +997,21 @@
 
     input.addEventListener('blur', () => {
       // Delay so mousedown on a suggestion fires before blur hides the list
-      setTimeout(closeSuggestions, 150);
+      setTimeout(() => {
+        closeSuggestions();
+        const project = input.value.trim();
+        if (project) loadFiles(project);
+      }, 150);
     });
   })();
 
-  // Close on click outside the dropdown
+  // Close on click outside either dropdown
   document.addEventListener('click', e => {
     if (!document.getElementById('project-dropdown').contains(e.target)) {
       closeSuggestions();
+    }
+    if (!document.getElementById('review-dropdown').contains(e.target)) {
+      closeFileSuggestions();
     }
   });
 </script>

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from pathlib import Path
-from orchestrator import query, query_stream, review_file
+from orchestrator import query, query_stream, review_file_stream, _prepare_review
 from ingest import ingest
 from config import CODE_MODEL, REASONING_MODEL, PROVIDER, VECTOR_STORE
 from memory import Session, new_session, load_session, list_sessions, delete_session
@@ -99,6 +99,21 @@ def list_projects():
         return {"projects": []}
     projects = sorted(p.name for p in VECTOR_STORE.iterdir() if p.is_dir())
     return {"projects": projects}
+
+
+@app.get("/files")
+def list_files(project_name: str):
+    """Return the sorted list of unique filepaths indexed for a project."""
+    from retriever import load_collection
+    try:
+        collection = load_collection(project_name)
+        results    = collection.get(include=["metadatas"])
+        filepaths  = sorted(set(m["filepath"] for m in results["metadatas"]))
+        return {"files": filepaths}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/ingest", response_model=IngestResponse)
@@ -249,11 +264,15 @@ def stream_query(request: StreamRequest):
     )
 
 
-@app.post("/review", response_model=QueryResponse)
+@app.post("/review")
 def review_file_endpoint(request: ReviewRequest):
     """
-    Load a full file into context and return a structured code review.
-    Does not use RAG — the entire file is passed directly to the model.
+    Stream a structured file review as Server-Sent Events.
+
+    SSE event types:
+      {"type": "token",       "content": "<text>"}   — one streamed token
+      {"type": "review_done", "session_id": "..."}   — stream finished
+      {"type": "error",       "detail": "<msg>"}     — something went wrong
     """
     allowed_models = {CODE_MODEL, REASONING_MODEL}
     if request.model not in allowed_models:
@@ -268,27 +287,34 @@ def review_file_endpoint(request: ReviewRequest):
     if session is None:
         session = new_session(request.project_name, session_id=request.session_id)
 
+    # Validate and build the prompt synchronously so errors become proper HTTP
+    # responses before the stream starts — generator exceptions after 200 OK
+    # can't be mapped to HTTP status codes.
     try:
-        answer, session = review_file(
-            filepath=request.filepath,
-            project_name=request.project_name,
-            session=session,
-            model=request.model,
-        )
+        review_prompt, clean_label = _prepare_review(request.filepath, request.project_name)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-    sessions[session.session_id] = session
+    def event_generator():
+        try:
+            for token in review_file_stream(review_prompt, clean_label, session, request.model):
+                yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
-    return QueryResponse(
-        answer=answer,
-        session_id=session.session_id,
-        model_used=request.model,
-        sources=[],
+            sessions[session.session_id] = session
+            yield f"data: {json.dumps({'type': 'review_done', 'session_id': session.session_id})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'detail': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":     "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

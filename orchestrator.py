@@ -178,26 +178,17 @@ def query_stream(
     save_session(session)
 
 
-# ── File review ───────────────────────────────────────────────────
-def review_file(
-    filepath: str,
-    project_name: str,
-    session: Session,
-    model: str = CODE_MODEL,
-) -> tuple[str, Session]:
+# ── File review helpers ───────────────────────────────────────────
+def _prepare_review(filepath: str, project_name: str) -> tuple[str, str]:
     """
-    Load an entire file into context and run a structured code review.
+    Validate the file and build the review prompt.
 
-    Does NOT use RAG retrieval — the full file is passed directly to the model.
-    Only a clean summary is stored in session history, never the raw file contents.
-
-    Raises:
-        FileNotFoundError: Project metadata or target file not found.
-        ValueError:        File exceeds MAX_FILE_TOKENS or path traversal detected.
+    Returns (review_prompt, clean_label).
+    Raises FileNotFoundError or ValueError — call this BEFORE starting a stream
+    so the caller can map exceptions to proper HTTP error responses.
     """
     from tools.file_reader import read_full_file, estimate_tokens, MAX_FILE_TOKENS
 
-    # Recover the original project root from metadata saved at ingest time
     meta_path = VECTOR_STORE / project_name / "_rex_meta.json"
     if not meta_path.exists():
         raise FileNotFoundError(
@@ -208,8 +199,8 @@ def review_file(
     meta         = json.loads(meta_path.read_text(encoding="utf-8"))
     project_root = meta["project_root"]
 
-    file_contents   = read_full_file(filepath, project_root)
-    token_estimate  = estimate_tokens(file_contents)
+    file_contents  = read_full_file(filepath, project_root)
+    token_estimate = estimate_tokens(file_contents)
 
     if token_estimate > MAX_FILE_TOKENS:
         raise ValueError(
@@ -235,23 +226,66 @@ def review_file(
         f"If a section has no findings, write \"None identified.\""
     )
 
+    clean_label = f"[File review] {filepath}"
+    return review_prompt, clean_label
+
+
+# ── File review — blocking ────────────────────────────────────────
+def review_file(
+    filepath: str,
+    project_name: str,
+    session: Session,
+    model: str = CODE_MODEL,
+) -> tuple[str, Session]:
+    """Blocking file review (kept for CLI / testing use)."""
+    review_prompt, clean_label = _prepare_review(filepath, project_name)
+
     messages = build_messages(session)
     messages.append({"role": "user", "content": review_prompt})
 
     raw_answer = get_provider(model=model).chat(SYSTEM_PROMPT, messages)
     answer     = re.sub(r"<think>.*?</think>", "", raw_answer, flags=re.DOTALL).strip()
 
-    # Store only a clean label — never the full file contents
-    clean_label = f"[File review] {filepath}"
     session.history.append({"role": "user",      "content": clean_label})
     session.history.append({"role": "assistant",  "content": answer})
     session.full_log.append({"role": "user",      "content": clean_label})
     session.full_log.append({"role": "assistant",  "content": answer})
-
     trim_history(session)
     save_session(session)
 
     return answer, session
+
+
+# ── File review — streaming ───────────────────────────────────────
+def review_file_stream(
+    review_prompt: str,
+    clean_label: str,
+    session: Session,
+    model: str = CODE_MODEL,
+) -> Iterator[str]:
+    """
+    Streaming file review. Accepts the already-validated prompt from _prepare_review()
+    so that validation errors are raised by the caller before the stream starts.
+
+    Yields clean response tokens. Session is saved after the last token.
+    """
+    messages = build_messages(session)
+    messages.append({"role": "user", "content": review_prompt})
+
+    raw_stream = get_provider(model=model).chat_stream(SYSTEM_PROMPT, messages)
+
+    accumulated: list[str] = []
+    for token in _strip_think_stream(raw_stream):
+        accumulated.append(token)
+        yield token
+
+    answer = "".join(accumulated)
+    session.history.append({"role": "user",      "content": clean_label})
+    session.history.append({"role": "assistant",  "content": answer})
+    session.full_log.append({"role": "user",      "content": clean_label})
+    session.full_log.append({"role": "assistant",  "content": answer})
+    trim_history(session)
+    save_session(session)
 
 
 # ── CLI entry point ───────────────────────────────────────────────
