@@ -18,11 +18,38 @@
     }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <!-- Prism VS Code Dark+ syntax theme -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prism-themes@1.9.0/themes/prism-vsc-dark-plus.css" />
 </head>
 <body>
+
+  <!-- ── Colour blindness SVG filters ──────────────────────── -->
+  <svg id="a11y-filters" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+      <filter id="deuteranopia">
+        <feColorMatrix type="matrix" values="
+          0.625 0.375 0     0 0
+          0.700 0.300 0     0 0
+          0     0.300 0.700 0 0
+          0     0     0     1 0"/>
+      </filter>
+      <filter id="protanopia">
+        <feColorMatrix type="matrix" values="
+          0.567 0.433 0     0 0
+          0.558 0.442 0     0 0
+          0     0.242 0.758 0 0
+          0     0     0     1 0"/>
+      </filter>
+      <filter id="tritanopia">
+        <feColorMatrix type="matrix" values="
+          0.950 0.050 0     0 0
+          0     0.433 0.567 0 0
+          0     0.475 0.525 0 0
+          0     0     0     1 0"/>
+      </filter>
+    </defs>
+  </svg>
 
   <!-- ── Sidebar ─────────────────────────────────────────── -->
   <aside class="sidebar">
@@ -81,44 +108,36 @@
     </div>
 
     <div id="model-section" class="sidebar-section">
-      <label class="field-label">Model</label>
-      <div class="model-toggle">
-        <button id="btn-code" class="model-btn active" onclick="setModel('code')">
-          Code
+      <label class="field-label">Models</label>
+      <div class="model-group-divider">
+        <span class="model-group-label">Local</span>
+      </div>
+      <div class="model-list">
+        <button id="btn-code" class="model-item active" onclick="setModel('code')">
+          <span class="model-item-name">Code</span>
+          <span class="model-item-id" id="model-label-code">—</span>
         </button>
-        <button id="btn-reasoning" class="model-btn" onclick="setModel('reasoning')">
-          Reasoning
+        <button id="btn-reasoning" class="model-item" onclick="setModel('reasoning')">
+          <span class="model-item-name">Reasoning</span>
+          <span class="model-item-id" id="model-label-reasoning">—</span>
         </button>
       </div>
-      <span id="model-label" class="model-label">codellama</span>
-    </div>
 
-    <!-- ── External providers ─────────────────────────── -->
-    <!-- Designed to grow: Phase 5 will add Groq, Gemini, DeepSeek rows here -->
-    <div class="sidebar-section providers-section">
-      <label class="field-label">External providers</label>
-      <div class="provider-list" id="provider-list">
+      <div class="model-group-divider">
+        <span class="model-group-label">Cloud</span>
+      </div>
 
-        <!-- Claude / God Mode row -->
-        <div class="provider-row" id="provider-row-claude">
-          <div class="provider-info">
-            <span class="provider-name">Claude</span>
-            <span class="provider-model-label">Sonnet 4.6</span>
-          </div>
-          <button
-            id="god-mode-btn"
-            class="god-mode-btn"
-            onclick="toggleGodMode()"
-            title=""
-          >God Mode</button>
+      <div class="model-list">
+        <div class="model-item-row">
+          <button id="btn-claude" class="model-item" onclick="setExternalModel('claude')" disabled>
+            <span class="model-item-name">Claude <span class="api-badge">API</span></span>
+            <span class="model-item-id">Sonnet 4.6</span>
+          </button>
+          <button class="model-info-btn" onclick="openUsageModal('claude')" aria-label="Claude usage info" title="Usage info">ⓘ</button>
         </div>
-
-      </div>
-      <div id="god-mode-warning" class="god-mode-warning" hidden>
-        God Mode uses your Anthropic API credits
-        <button class="warning-dismiss" onclick="dismissGodModeWarning()" aria-label="Dismiss">×</button>
       </div>
     </div>
+
 
     <div class="sidebar-section">
       <label class="field-label">Results per query</label>
@@ -129,40 +148,240 @@
       </div>
     </div>
 
-    <div class="sidebar-section">
-      <label class="field-label">Accent Colour</label>
-      <div class="colour-row">
-        <input type="color" id="accent-picker" value="#c8ff00" oninput="updateAccent(this.value)" />
-        <div class="colour-swatches">
-          <span class="swatch" title="Volt"     style="background:#c8ff00" onclick="updateAccent('#c8ff00')"></span>
-          <span class="swatch" title="Cyan"     style="background:#00d4ff" onclick="updateAccent('#00d4ff')"></span>
-          <span class="swatch" title="Mint"     style="background:#00ff9f" onclick="updateAccent('#00ff9f')"></span>
-          <span class="swatch" title="Orange"   style="background:#ff6b35" onclick="updateAccent('#ff6b35')"></span>
-          <span class="swatch" title="Violet"   style="background:#b06aff" onclick="updateAccent('#b06aff')"></span>
-          <span class="swatch" title="Rose"     style="background:#ff4d8f" onclick="updateAccent('#ff4d8f')"></span>
-        </div>
-      </div>
-      <div class="dim-preview">
-        <span class="dim-swatch" id="dim-swatch"></span>
-        <span class="dim-hex" id="dim-hex"></span>
-      </div>
-    </div>
-
-    <!-- ── Claude usage panel (visible once God Mode has been used) ── -->
-    <div id="usage-panel" class="sidebar-section usage-panel" hidden>
-      <label class="field-label">Claude usage</label>
-      <div class="usage-stats">
-        <span class="usage-tokens" id="usage-tokens">0 tokens</span>
-        <span class="usage-cost"   id="usage-cost">$0.0000</span>
-      </div>
-      <button class="usage-reset" onclick="resetUsage()">Reset</button>
-    </div>
-
     <div class="sidebar-footer">
-      <button class="btn-clear" onclick="clearSession()">New Session</button>
+      <div class="footer-btn-row">
+        <button class="btn-settings" onclick="openSettings()" title="Settings" aria-label="Settings">⚙</button>
+        <button class="btn-clear" onclick="clearSession()">New Session</button>
+      </div>
       <div id="server-status" class="server-status">Connecting...</div>
     </div>
   </aside>
+
+  <!-- ── Usage modal ───────────────────────────────────────── -->
+  <div id="usage-modal" class="usage-modal-overlay" hidden>
+    <div class="usage-modal-backdrop"></div>
+    <div class="usage-modal-card" role="dialog" aria-modal="true">
+      <div class="usage-modal-header">
+        <div>
+          <span id="modal-provider-name" class="modal-provider-name">Claude</span>
+          <span id="modal-provider-sub" class="modal-provider-sub">Sonnet 4.6 · Anthropic</span>
+        </div>
+        <button class="usage-modal-close" onclick="closeUsageModal()" aria-label="Close">×</button>
+      </div>
+      <div class="usage-modal-stats">
+        <div class="usage-stat-row">
+          <span class="usage-stat-label">Input tokens</span>
+          <span id="modal-input-tokens" class="usage-stat-val">0</span>
+        </div>
+        <div class="usage-stat-row">
+          <span class="usage-stat-label">Output tokens</span>
+          <span id="modal-output-tokens" class="usage-stat-val">0</span>
+        </div>
+        <div class="usage-stat-row">
+          <span class="usage-stat-label">Requests</span>
+          <span id="modal-requests" class="usage-stat-val">0</span>
+        </div>
+        <div class="usage-stat-row">
+          <span class="usage-stat-label">Est. cost</span>
+          <span id="modal-cost" class="usage-stat-val modal-cost">$0.0000</span>
+        </div>
+      </div>
+      <button class="usage-modal-reset" onclick="resetUsage()">Reset</button>
+    </div>
+  </div>
+
+  <!-- ── Settings modal ────────────────────────────────────── -->
+  <div id="settings-modal" class="settings-overlay" hidden>
+    <div class="settings-backdrop" onclick="closeSettings()"></div>
+    <div class="settings-card" role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="settings-header">
+        <span class="settings-header-title">Settings</span>
+        <button class="settings-close" onclick="closeSettings()" aria-label="Close">×</button>
+      </div>
+      <div class="settings-body">
+
+        <!-- Section 1: Appearance -->
+        <div class="accordion-section" id="acc-appearance">
+          <button class="accordion-header" onclick="toggleAccordion('acc-appearance')">
+            Appearance <span class="accordion-chevron">›</span>
+          </button>
+          <div class="accordion-content">
+            <div class="accordion-inner">
+
+              <!-- Accent Colour -->
+              <div class="settings-sub">
+                <div class="settings-label">Accent Colour</div>
+                <div class="swatch-categories">
+                  <button class="swatch-cat-btn active" onclick="setSwatchCat('neon',this)">Neon</button>
+                  <button class="swatch-cat-btn" onclick="setSwatchCat('cyberpunk',this)">Cyberpunk</button>
+                  <button class="swatch-cat-btn" onclick="setSwatchCat('pastel',this)">Pastel</button>
+                  <button class="swatch-cat-btn" onclick="setSwatchCat('ice',this)">Ice</button>
+                  <button class="swatch-cat-btn" onclick="setSwatchCat('sunset',this)">Sunset</button>
+                  <button class="swatch-cat-btn" onclick="setSwatchCat('mono',this)">Mono</button>
+                </div>
+                <div class="swatch-grid-wrap active" id="swatches-neon">
+                  <span class="modal-swatch" data-hex="#c8ff00" style="background:#c8ff00" onclick="settingsSwatch('#c8ff00')"></span>
+                  <span class="modal-swatch" data-hex="#00ff9f" style="background:#00ff9f" onclick="settingsSwatch('#00ff9f')"></span>
+                  <span class="modal-swatch" data-hex="#00d4ff" style="background:#00d4ff" onclick="settingsSwatch('#00d4ff')"></span>
+                  <span class="modal-swatch" data-hex="#ff4d8f" style="background:#ff4d8f" onclick="settingsSwatch('#ff4d8f')"></span>
+                  <span class="modal-swatch" data-hex="#b06aff" style="background:#b06aff" onclick="settingsSwatch('#b06aff')"></span>
+                  <span class="modal-swatch" data-hex="#ff6b35" style="background:#ff6b35" onclick="settingsSwatch('#ff6b35')"></span>
+                </div>
+                <div class="swatch-grid-wrap" id="swatches-cyberpunk">
+                  <span class="modal-swatch" data-hex="#ff003c" style="background:#ff003c" onclick="settingsSwatch('#ff003c')"></span>
+                  <span class="modal-swatch" data-hex="#ff9500" style="background:#ff9500" onclick="settingsSwatch('#ff9500')"></span>
+                  <span class="modal-swatch" data-hex="#ffe600" style="background:#ffe600" onclick="settingsSwatch('#ffe600')"></span>
+                  <span class="modal-swatch" data-hex="#00ff41" style="background:#00ff41" onclick="settingsSwatch('#00ff41')"></span>
+                  <span class="modal-swatch" data-hex="#00b4ff" style="background:#00b4ff" onclick="settingsSwatch('#00b4ff')"></span>
+                  <span class="modal-swatch" data-hex="#da00ff" style="background:#da00ff" onclick="settingsSwatch('#da00ff')"></span>
+                </div>
+                <div class="swatch-grid-wrap" id="swatches-pastel">
+                  <span class="modal-swatch" data-hex="#ffb3c1" style="background:#ffb3c1" onclick="settingsSwatch('#ffb3c1')"></span>
+                  <span class="modal-swatch" data-hex="#ffd6a5" style="background:#ffd6a5" onclick="settingsSwatch('#ffd6a5')"></span>
+                  <span class="modal-swatch" data-hex="#fdffb6" style="background:#fdffb6" onclick="settingsSwatch('#fdffb6')"></span>
+                  <span class="modal-swatch" data-hex="#caffbf" style="background:#caffbf" onclick="settingsSwatch('#caffbf')"></span>
+                  <span class="modal-swatch" data-hex="#9bf6ff" style="background:#9bf6ff" onclick="settingsSwatch('#9bf6ff')"></span>
+                  <span class="modal-swatch" data-hex="#bdb2ff" style="background:#bdb2ff" onclick="settingsSwatch('#bdb2ff')"></span>
+                </div>
+                <div class="swatch-grid-wrap" id="swatches-ice">
+                  <span class="modal-swatch" data-hex="#e0fbfc" style="background:#e0fbfc" onclick="settingsSwatch('#e0fbfc')"></span>
+                  <span class="modal-swatch" data-hex="#98c1d9" style="background:#98c1d9" onclick="settingsSwatch('#98c1d9')"></span>
+                  <span class="modal-swatch" data-hex="#48cae4" style="background:#48cae4" onclick="settingsSwatch('#48cae4')"></span>
+                  <span class="modal-swatch" data-hex="#00b4d8" style="background:#00b4d8" onclick="settingsSwatch('#00b4d8')"></span>
+                  <span class="modal-swatch" data-hex="#0096c7" style="background:#0096c7" onclick="settingsSwatch('#0096c7')"></span>
+                  <span class="modal-swatch" data-hex="#4cc9f0" style="background:#4cc9f0" onclick="settingsSwatch('#4cc9f0')"></span>
+                </div>
+                <div class="swatch-grid-wrap" id="swatches-sunset">
+                  <span class="modal-swatch" data-hex="#ff6b6b" style="background:#ff6b6b" onclick="settingsSwatch('#ff6b6b')"></span>
+                  <span class="modal-swatch" data-hex="#ff8e53" style="background:#ff8e53" onclick="settingsSwatch('#ff8e53')"></span>
+                  <span class="modal-swatch" data-hex="#ff6b35" style="background:#ff6b35" onclick="settingsSwatch('#ff6b35')"></span>
+                  <span class="modal-swatch" data-hex="#ff4d6d" style="background:#ff4d6d" onclick="settingsSwatch('#ff4d6d')"></span>
+                  <span class="modal-swatch" data-hex="#c9184a" style="background:#c9184a" onclick="settingsSwatch('#c9184a')"></span>
+                  <span class="modal-swatch" data-hex="#ff9f1c" style="background:#ff9f1c" onclick="settingsSwatch('#ff9f1c')"></span>
+                </div>
+                <div class="swatch-grid-wrap" id="swatches-mono">
+                  <span class="modal-swatch" data-hex="#ffffff" style="background:#ffffff" onclick="settingsSwatch('#ffffff')"></span>
+                  <span class="modal-swatch" data-hex="#e8e8e8" style="background:#e8e8e8" onclick="settingsSwatch('#e8e8e8')"></span>
+                  <span class="modal-swatch" data-hex="#c0c0c0" style="background:#c0c0c0" onclick="settingsSwatch('#c0c0c0')"></span>
+                  <span class="modal-swatch" data-hex="#909090" style="background:#909090" onclick="settingsSwatch('#909090')"></span>
+                  <span class="modal-swatch" data-hex="#606060" style="background:#606060" onclick="settingsSwatch('#606060')"></span>
+                  <span class="modal-swatch" data-hex="#f5f5f5" style="background:#f5f5f5" onclick="settingsSwatch('#f5f5f5')"></span>
+                </div>
+                <div class="hsb-slider-group">
+                  <div class="hsb-row">
+                    <span class="hsb-label">H</span>
+                    <input type="range" class="hsb-slider" id="hsb-h" min="0" max="360" value="72" oninput="onHsbChange()">
+                    <span class="hsb-val" id="hsb-h-val">72</span>
+                  </div>
+                  <div class="hsb-row">
+                    <span class="hsb-label">S</span>
+                    <input type="range" class="hsb-slider" id="hsb-s" min="0" max="100" value="100" oninput="onHsbChange()">
+                    <span class="hsb-val" id="hsb-s-val">100%</span>
+                  </div>
+                  <div class="hsb-row">
+                    <span class="hsb-label">B</span>
+                    <input type="range" class="hsb-slider" id="hsb-b" min="0" max="100" value="100" oninput="onHsbChange()">
+                    <span class="hsb-val" id="hsb-b-val">100%</span>
+                  </div>
+                </div>
+                <div class="hex-input-row">
+                  <span class="hex-prefix">#</span>
+                  <input type="text" class="hex-input" id="hex-input" maxlength="6" placeholder="C8FF00" oninput="onHexInput(this)">
+                </div>
+                <div class="dim-preview">
+                  <span class="dim-swatch" id="dim-swatch"></span>
+                  <span class="dim-hex" id="dim-hex"></span>
+                </div>
+                <!-- Hidden picker kept for updateAccent() compatibility -->
+                <input type="color" id="accent-picker" value="#c8ff00" style="display:none" oninput="updateAccent(this.value)">
+              </div>
+
+              <!-- Background -->
+              <div class="settings-sub">
+                <div class="settings-label">Background</div>
+                <div class="three-toggle">
+                  <button class="three-toggle-btn active" id="bg-dark"   onclick="setBgMode('dark',this)">Dark</button>
+                  <button class="three-toggle-btn"        id="bg-darker" onclick="setBgMode('darker',this)">Darker</button>
+                  <button class="three-toggle-btn"        id="bg-oled"   onclick="setBgMode('oled',this)">OLED</button>
+                </div>
+              </div>
+
+              <!-- Sidebar Width -->
+              <div class="settings-sub">
+                <div class="settings-label">Sidebar Width</div>
+                <div class="three-toggle">
+                  <button class="three-toggle-btn"        id="sw-narrow" onclick="setSidebarWidth('narrow',this)">Narrow</button>
+                  <button class="three-toggle-btn active" id="sw-normal" onclick="setSidebarWidth('normal',this)">Normal</button>
+                  <button class="three-toggle-btn"        id="sw-wide"   onclick="setSidebarWidth('wide',this)">Wide</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Accessibility -->
+        <div class="accordion-section" id="acc-a11y">
+          <button class="accordion-header" onclick="toggleAccordion('acc-a11y')">
+            Accessibility <span class="accordion-chevron">›</span>
+          </button>
+          <div class="accordion-content">
+            <div class="accordion-inner">
+              <div class="settings-sub">
+                <div class="settings-label">Colour Blind Mode</div>
+                <select class="a11y-select" id="a11y-select" onchange="setA11yFilter(this.value)">
+                  <option value="none">None</option>
+                  <option value="deuteranopia">Deuteranopia — red-green, most common</option>
+                  <option value="protanopia">Protanopia — red weakness</option>
+                  <option value="tritanopia">Tritanopia — blue-yellow</option>
+                  <option value="high-contrast">High Contrast</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 3: Chat -->
+        <div class="accordion-section" id="acc-chat">
+          <button class="accordion-header" onclick="toggleAccordion('acc-chat')">
+            Chat <span class="accordion-chevron">›</span>
+          </button>
+          <div class="accordion-content">
+            <div class="accordion-inner">
+              <div class="toggle-row">
+                <span class="toggle-label-text">Token count per message</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="token-count-toggle" checked onchange="setTokenCount(this.checked)">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 4: About -->
+        <div class="accordion-section" id="acc-about">
+          <button class="accordion-header" onclick="toggleAccordion('acc-about')">
+            About <span class="accordion-chevron">›</span>
+          </button>
+          <div class="accordion-content">
+            <div class="accordion-inner">
+              <div class="about-row">
+                <span class="about-key">Version</span>
+                <span class="about-val">0.1.0</span>
+              </div>
+              <div class="about-note">Local models via Ollama. External providers via API.</div>
+              <div class="about-row">
+                <span class="about-key">GitHub</span>
+                <span class="about-val">github.com/tomadams2909/ai-dev-assistant</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
 
   <!-- ── Main chat area ──────────────────────────────────── -->
   <main class="main">
@@ -385,7 +604,8 @@
         window.CODE_MODEL      = mData.models.code;
         window.REASONING_MODEL = mData.models.reasoning;
         currentModel           = window.CODE_MODEL;
-        document.getElementById("model-label").textContent = currentModel;
+        document.getElementById('model-label-code').textContent      = window.CODE_MODEL      || '—';
+        document.getElementById('model-label-reasoning').textContent = window.REASONING_MODEL || '—';
         await loadProjects();
       }
     } catch {
@@ -395,13 +615,31 @@
     }
   }
 
-  // ── Model toggle ─────────────────────────────────────
+  // ── Model selection ───────────────────────────────────
   function setModel(type) {
-    const isCode = type === "code";
+    // Deselect Claude if it was active
+    if (claudeActive) {
+      claudeActive = false;
+      document.getElementById('btn-claude').classList.remove('active');
+    }
+    const isCode = type === 'code';
     currentModel = isCode ? window.CODE_MODEL : window.REASONING_MODEL;
-    document.getElementById("model-label").textContent = currentModel;
-    document.getElementById("btn-code").classList.toggle("active", isCode);
-    document.getElementById("btn-reasoning").classList.toggle("active", !isCode);
+    document.getElementById('btn-code').classList.toggle('active', isCode);
+    document.getElementById('btn-reasoning').classList.toggle('active', !isCode);
+  }
+
+  function setExternalModel(provider) {
+    if (!godModeAvailable) return;
+    // Deselect all local models
+    document.getElementById('btn-code').classList.remove('active');
+    document.getElementById('btn-reasoning').classList.remove('active');
+
+    if (provider === 'claude') {
+      claudeActive = true;
+      currentModel = window.CLAUDE_MODEL;
+      document.getElementById('btn-claude').classList.add('active');
+    }
+    // Phase 5: add additional cloud providers here
   }
 
   // ── Ingest project ───────────────────────────────────
@@ -615,10 +853,20 @@
     pill.textContent = "File review";
     bubble.prepend(pill);
 
+    const tokenCount = Math.round((wrap.dataset.raw || '').length / 4);
+    wrap.dataset.tokenCount = tokenCount;
+    if (showTokenCount) {
+      const src = document.createElement("div");
+      src.className = "sources";
+      src.innerHTML = "<span class='sources-label'>Sources</span>" +
+        `<span class="source-chip token-chip">~${tokenCount} tokens</span>`;
+      wrap.appendChild(src);
+    }
+
     document.getElementById("chat-window").scrollTop =
       document.getElementById("chat-window").scrollHeight;
 
-    if (godModeActive) refreshUsage();
+    if (claudeActive) refreshUsage();
   }
 
   // ── Sidebar review trigger ───────────────────────────
@@ -675,7 +923,7 @@
       src.className = "sources";
       src.innerHTML = "<span class='sources-label'>Sources</span>" +
         sources.map(s =>
-          `<span class="source-chip">${s.filepath}:${s.start_line} <em>${s.score}</em></span>`
+          `<span class="source-chip">${s.filepath}:${s.start_line}</span>`
         ).join("");
       wrap.appendChild(src);
     }
@@ -768,20 +1016,29 @@
     addCopyButtons(bubble.querySelector(".md"));
     bubble.querySelector(".stream-cursor")?.remove();
 
-    if (sources && sources.length > 0) {
+    const tokenCount = Math.round((wrap.dataset.raw || '').length / 4);
+    wrap.dataset.tokenCount = tokenCount;
+
+    const hasSources = sources && sources.length > 0;
+    if (hasSources || showTokenCount) {
       const src = document.createElement("div");
       src.className = "sources";
-      src.innerHTML = "<span class='sources-label'>Sources</span>" +
-        sources.map(s =>
-          `<span class="source-chip">${s.filepath}:${s.start_line} <em>${s.score}</em></span>`
+      src.innerHTML = "<span class='sources-label'>Sources</span>";
+      if (showTokenCount) {
+        src.innerHTML += `<span class="source-chip token-chip">~${tokenCount} tokens</span>`;
+      }
+      if (hasSources) {
+        src.innerHTML += sources.map(s =>
+          `<span class="source-chip">${s.filepath}:${s.start_line}</span>`
         ).join("");
+      }
       wrap.appendChild(src);
     }
 
     document.getElementById("chat-window").scrollTop =
       document.getElementById("chat-window").scrollHeight;
 
-    if (godModeActive) refreshUsage();
+    if (claudeActive) refreshUsage();
   }
 
   function removeStreamingBubble(id) {
@@ -1049,10 +1306,8 @@
   })();
 
   // ── God Mode ─────────────────────────────────────────
-  let godModeActive        = false;
-  let godModeAvailable     = false;
-  let godModeWarningShown  = false;
-  let localModelBeforeGod  = null;   // remembers which local model was active
+  let claudeActive     = false;   // true when Claude (external) is the selected model
+  let godModeAvailable = false;   // true when ANTHROPIC_API_KEY is configured
 
   async function checkGodModeStatus() {
     try {
@@ -1061,90 +1316,59 @@
       const data = await res.json();
       godModeAvailable       = data.available;
       window.CLAUDE_MODEL    = data.model;
-      const btn              = document.getElementById('god-mode-btn');
+      const btn = document.getElementById('btn-claude');
       if (!godModeAvailable) {
-        btn.disabled   = true;
-        btn.title      = 'Add ANTHROPIC_API_KEY to .env to enable';
+        btn.disabled = true;
+        btn.title    = 'Add ANTHROPIC_API_KEY to .env to enable';
       } else {
-        btn.disabled   = false;
-        btn.title      = '';
+        btn.disabled = false;
+        btn.title    = '';
       }
     } catch { /* server offline — no-op */ }
   }
 
-  function toggleGodMode() {
-    if (!godModeAvailable) return;
-    godModeActive = !godModeActive;
+  // ── Usage modal data ──────────────────────────────────
+  let activeModalProvider = null;
 
-    const btn         = document.getElementById('god-mode-btn');
-    const modelSection = document.getElementById('model-section');
-
-    if (godModeActive) {
-      // Remember the current local model so we can restore it later
-      localModelBeforeGod = currentModel;
-      currentModel        = window.CLAUDE_MODEL;
-
-      btn.classList.add('active');
-      modelSection.classList.add('god-mode-active');
-      document.getElementById('model-label').textContent = 'Claude Sonnet 4.6';
-
-      // One-time per-session warning
-      if (!godModeWarningShown) {
-        document.getElementById('god-mode-warning').hidden = false;
-        godModeWarningShown = true;
-      }
-    } else {
-      // Restore the previously selected local model
-      currentModel = localModelBeforeGod || window.CODE_MODEL;
-      localModelBeforeGod = null;
-
-      btn.classList.remove('active');
-      modelSection.classList.remove('god-mode-active');
-
-      // Update the model label to reflect the restored local model
-      const isCode = currentModel === window.CODE_MODEL;
-      document.getElementById('model-label').textContent = currentModel;
-      document.getElementById('btn-code').classList.toggle('active', isCode);
-      document.getElementById('btn-reasoning').classList.toggle('active', !isCode);
-    }
-  }
-
-  function dismissGodModeWarning() {
-    document.getElementById('god-mode-warning').classList.add('hidden');
-  }
-
-  // ── Usage panel ───────────────────────────────────────
   async function refreshUsage() {
+    // Refresh modal stats if it is currently open
+    if (activeModalProvider) await loadUsageIntoModal();
+  }
+
+  async function loadUsageIntoModal() {
     try {
       const res  = await fetch(`${API}/usage`);
       if (!res.ok) return;
       const data = await res.json();
-
-      const totalTokens = (data.total_input_tokens || 0) + (data.total_output_tokens || 0);
-      const cost        = (data.estimated_cost_usd || 0).toFixed(4);
-
-      document.getElementById('usage-tokens').textContent =
-        totalTokens.toLocaleString() + ' tokens';
-      document.getElementById('usage-cost').textContent = '$' + cost;
-
-      if ((data.total_requests || 0) > 0) {
-        document.getElementById('usage-panel').hidden = false;
-      }
+      document.getElementById('modal-input-tokens').textContent  = (data.total_input_tokens  || 0).toLocaleString();
+      document.getElementById('modal-output-tokens').textContent = (data.total_output_tokens || 0).toLocaleString();
+      document.getElementById('modal-requests').textContent      = (data.total_requests      || 0).toLocaleString();
+      document.getElementById('modal-cost').textContent          = '$' + (data.estimated_cost_usd || 0).toFixed(4);
     } catch { /* server offline — no-op */ }
   }
 
   async function resetUsage() {
     try {
-      const res  = await fetch(`${API}/usage/reset`, { method: 'POST' });
-      if (!res.ok) return;
-      const data = await res.json();
-      document.getElementById('usage-tokens').textContent = '0 tokens';
-      document.getElementById('usage-cost').textContent   = '$0.0000';
-      document.getElementById('usage-panel').hidden        = true;
+      await fetch(`${API}/usage/reset`, { method: 'POST' });
+      document.getElementById('modal-input-tokens').textContent  = '0';
+      document.getElementById('modal-output-tokens').textContent = '0';
+      document.getElementById('modal-requests').textContent      = '0';
+      document.getElementById('modal-cost').textContent          = '$0.0000';
     } catch { /* no-op */ }
   }
 
-  // ── Close on click outside either dropdown
+  function openUsageModal(provider) {
+    activeModalProvider = provider;
+    document.getElementById('usage-modal').hidden = false;
+    loadUsageIntoModal();
+  }
+
+  function closeUsageModal() {
+    document.getElementById('usage-modal').hidden = true;
+    activeModalProvider = null;
+  }
+
+  // ── Close on click outside either dropdown or modal
   document.addEventListener('click', e => {
     if (!document.getElementById('project-dropdown').contains(e.target)) {
       closeSuggestions();
@@ -1152,7 +1376,285 @@
     if (!document.getElementById('review-dropdown').contains(e.target)) {
       closeFileSuggestions();
     }
+    // Close usage modal on backdrop click
+    const modal = document.getElementById('usage-modal');
+    if (!modal.hidden && (e.target === modal || e.target.classList.contains('usage-modal-backdrop'))) {
+      closeUsageModal();
+    }
   });
+
+  // Close usage modal on Escape
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !document.getElementById('usage-modal').hidden) {
+      closeUsageModal();
+    }
+    if (e.key === 'Escape' && !document.getElementById('settings-modal').hidden) {
+      closeSettings();
+    }
+  });
+
+  // Close settings on backdrop click handled inline; also close on outside click
+  document.addEventListener('click', e => {
+    const sm = document.getElementById('settings-modal');
+    if (!sm.hidden && e.target === sm) closeSettings();
+  });
+
+  // ── Settings modal open/close ─────────────────────────
+  function openSettings() {
+    const currentAccent = getComputedStyle(document.documentElement)
+      .getPropertyValue('--accent').trim() || '#c8ff00';
+    document.getElementById('settings-modal').hidden = false;
+    syncHsbFromHex(currentAccent);
+    updateActiveSwatches();
+  }
+
+  function closeSettings() {
+    document.getElementById('settings-modal').hidden = true;
+  }
+
+  // ── Accordion ─────────────────────────────────────────
+  function toggleAccordion(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // ── Swatch categories ─────────────────────────────────
+  function setSwatchCat(cat, btn) {
+    document.querySelectorAll('.swatch-cat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.swatch-grid-wrap').forEach(g => g.classList.remove('active'));
+    document.getElementById('swatches-' + cat).classList.add('active');
+  }
+
+  function settingsSwatch(hex) {
+    updateAccent(hex);
+    syncHsbFromHex(hex);
+    updateActiveSwatches();
+  }
+
+  function updateActiveSwatches() {
+    const current = (getComputedStyle(document.documentElement)
+      .getPropertyValue('--accent').trim() || '#c8ff00').toLowerCase();
+    document.querySelectorAll('.modal-swatch').forEach(sw => {
+      sw.classList.toggle('active-swatch', sw.dataset.hex.toLowerCase() === current);
+    });
+  }
+
+  // ── HSB conversion ────────────────────────────────────
+  function hexToHsb(hex) {
+    const h = hex.replace('#', '');
+    let r = parseInt(h.slice(0,2),16)/255;
+    let g = parseInt(h.slice(2,4),16)/255;
+    let b = parseInt(h.slice(4,6),16)/255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b);
+    const v = max;
+    const s = max === 0 ? 0 : (max - min) / max;
+    let hue = 0;
+    if (max !== min) {
+      const d = max - min;
+      switch(max) {
+        case r: hue = ((g-b)/d + (g<b?6:0))/6; break;
+        case g: hue = ((b-r)/d + 2)/6; break;
+        case b: hue = ((r-g)/d + 4)/6; break;
+      }
+    }
+    return [Math.round(hue*360), Math.round(s*100), Math.round(v*100)];
+  }
+
+  function hsbToHex(h, s, v) {
+    s /= 100; v /= 100;
+    const f = (n, k = (n + h/60) % 6) => v - v*s*Math.max(Math.min(k,4-k,1),0);
+    const r = Math.round(f(5)*255).toString(16).padStart(2,'0');
+    const g = Math.round(f(3)*255).toString(16).padStart(2,'0');
+    const b = Math.round(f(1)*255).toString(16).padStart(2,'0');
+    return `#${r}${g}${b}`;
+  }
+
+  function syncHsbFromHex(hex) {
+    if (!hex || hex.length < 7) return;
+    const [h, s, b] = hexToHsb(hex);
+    const hEl = document.getElementById('hsb-h');
+    if (!hEl) return;
+    hEl.value = h;
+    document.getElementById('hsb-s').value = s;
+    document.getElementById('hsb-b').value = b;
+    document.getElementById('hsb-h-val').textContent = h;
+    document.getElementById('hsb-s-val').textContent = s + '%';
+    document.getElementById('hsb-b-val').textContent = b + '%';
+    updateHsbSliderTracks(h, s, b);
+    const hexEl = document.getElementById('hex-input');
+    if (hexEl) hexEl.value = hex.replace('#','').toUpperCase();
+  }
+
+  function updateHsbSliderTracks(h, s, b) {
+    const hSlider = document.getElementById('hsb-h');
+    const sSlider = document.getElementById('hsb-s');
+    const bSlider = document.getElementById('hsb-b');
+    if (!hSlider) return;
+    hSlider.style.background =
+      'linear-gradient(to right,#ff0000,#ffff00,#00ff00,#00ffff,#0000ff,#ff00ff,#ff0000)';
+    const bSafe = b || 100;
+    const fullSat  = hsbToHex(h, 100, bSafe);
+    const noSat    = hsbToHex(h, 0,   bSafe);
+    sSlider.style.background = `linear-gradient(to right,${noSat},${fullSat})`;
+    const sSafe    = s || 100;
+    const fullBri  = hsbToHex(h, sSafe, 100);
+    bSlider.style.background = `linear-gradient(to right,#000000,${fullBri})`;
+  }
+
+  function onHsbChange() {
+    const h = parseInt(document.getElementById('hsb-h').value);
+    const s = parseInt(document.getElementById('hsb-s').value);
+    const b = parseInt(document.getElementById('hsb-b').value);
+    document.getElementById('hsb-h-val').textContent = h;
+    document.getElementById('hsb-s-val').textContent = s + '%';
+    document.getElementById('hsb-b-val').textContent = b + '%';
+    const hex = hsbToHex(h, s, b);
+    updateHsbSliderTracks(h, s, b);
+    const hexEl = document.getElementById('hex-input');
+    if (hexEl) hexEl.value = hex.replace('#','').toUpperCase();
+    updateAccent(hex);
+    updateActiveSwatches();
+  }
+
+  function onHexInput(el) {
+    const val = el.value.replace(/[^0-9a-fA-F]/g,'');
+    el.value  = val.toUpperCase();
+    if (val.length === 6) {
+      el.classList.remove('invalid');
+      const hex = '#' + val;
+      updateAccent(hex);
+      syncHsbFromHex(hex);
+      updateActiveSwatches();
+    } else {
+      el.classList.add('invalid');
+    }
+  }
+
+  // ── Background mode ────────────────────────────────────
+  const BG_MODES = {
+    dark:   { bg: '#0a0a0a', bg2: '#111111', bg3: '#1a1a1a' },
+    darker: { bg: '#050505', bg2: '#0a0a0a', bg3: '#111111' },
+    oled:   { bg: '#000000', bg2: '#050505', bg3: '#0a0a0a' },
+  };
+
+  function setBgMode(mode, btn) {
+    const m = BG_MODES[mode]; if (!m) return;
+    document.documentElement.style.setProperty('--bg',   m.bg);
+    document.documentElement.style.setProperty('--bg-2', m.bg2);
+    document.documentElement.style.setProperty('--bg-3', m.bg3);
+    document.querySelectorAll('.three-toggle-btn[id^="bg-"]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    localStorage.setItem('rex-bg-mode', mode);
+  }
+
+  function applyBgMode(mode) {
+    const m = BG_MODES[mode]; if (!m) return;
+    document.documentElement.style.setProperty('--bg',   m.bg);
+    document.documentElement.style.setProperty('--bg-2', m.bg2);
+    document.documentElement.style.setProperty('--bg-3', m.bg3);
+    const btn = document.getElementById('bg-' + mode);
+    if (btn) {
+      document.querySelectorAll('.three-toggle-btn[id^="bg-"]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+  }
+
+  // ── Sidebar width ──────────────────────────────────────
+  const SIDEBAR_WIDTHS = {
+    narrow: 'clamp(200px, 18%, 280px)',
+    normal: 'clamp(240px, 22%, 320px)',
+    wide:   'clamp(300px, 28%, 400px)',
+  };
+
+  function setSidebarWidth(preset, btn) {
+    const val = SIDEBAR_WIDTHS[preset]; if (!val) return;
+    document.documentElement.style.setProperty('--sidebar-width', val);
+    document.querySelectorAll('.three-toggle-btn[id^="sw-"]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    localStorage.setItem('rex-sidebar-width', preset);
+  }
+
+  function applySidebarWidth(preset) {
+    const val = SIDEBAR_WIDTHS[preset]; if (!val) return;
+    document.documentElement.style.setProperty('--sidebar-width', val);
+    const btn = document.getElementById('sw-' + preset);
+    if (btn) {
+      document.querySelectorAll('.three-toggle-btn[id^="sw-"]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+  }
+
+  // ── Colour blind filter ────────────────────────────────
+  function setA11yFilter(mode) {
+    if (mode === 'none') {
+      document.body.style.filter = '';
+    } else if (mode === 'high-contrast') {
+      document.body.style.filter = 'contrast(1.4) saturate(1.2)';
+    } else {
+      document.body.style.filter = `url('#${mode}')`;
+    }
+    localStorage.setItem('rex-a11y-filter', mode);
+  }
+
+  function applyA11yFilter(mode) {
+    setA11yFilter(mode);
+    const sel = document.getElementById('a11y-select');
+    if (sel) sel.value = mode;
+  }
+
+  // ── Token count per message ────────────────────────────
+  let showTokenCount = true;
+
+  function setTokenCount(on) {
+    showTokenCount = on;
+    localStorage.setItem('rex-show-tokens', on ? '1' : '0');
+    document.querySelectorAll('.message.assistant').forEach(msg => {
+      const tc = msg.dataset.tokenCount;
+      if (!tc) return;
+      let srcDiv = msg.querySelector('.sources');
+      if (on) {
+        if (!msg.querySelector('.token-chip')) {
+          if (!srcDiv) {
+            srcDiv = document.createElement('div');
+            srcDiv.className = 'sources';
+            srcDiv.innerHTML = "<span class='sources-label'>Sources</span>";
+            msg.appendChild(srcDiv);
+          }
+          const chip = document.createElement('span');
+          chip.className   = 'source-chip token-chip';
+          chip.textContent = `~${tc} tokens`;
+          const label = srcDiv.querySelector('.sources-label');
+          if (label && label.nextSibling) srcDiv.insertBefore(chip, label.nextSibling);
+          else if (label) srcDiv.appendChild(chip);
+          else srcDiv.insertBefore(chip, srcDiv.firstChild);
+        }
+      } else {
+        msg.querySelectorAll('.token-chip').forEach(c => c.remove());
+        if (srcDiv && srcDiv.querySelectorAll('.source-chip').length === 0) {
+          srcDiv.remove();
+        }
+      }
+    });
+  }
+
+  // ── Apply persisted settings on page load ─────────────
+  (function applyPersistedSettings() {
+    const bgMode = localStorage.getItem('rex-bg-mode');
+    if (bgMode) applyBgMode(bgMode);
+
+    const swPreset = localStorage.getItem('rex-sidebar-width');
+    if (swPreset) applySidebarWidth(swPreset);
+
+    const a11y = localStorage.getItem('rex-a11y-filter');
+    if (a11y) applyA11yFilter(a11y);
+
+    const tokens = localStorage.getItem('rex-show-tokens');
+    if (tokens === '0') {
+      showTokenCount = false;
+      const toggle = document.getElementById('token-count-toggle');
+      if (toggle) toggle.checked = false;
+    }
+  })();
 </script>
 </body>
 </html>
