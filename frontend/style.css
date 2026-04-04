@@ -39,6 +39,26 @@ body { display: flex; height: 100vh; overflow: hidden; }
   flex-direction: column;
   padding: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) var(--bg-2);
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 3px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: var(--bg-2);
+  border-radius: 0;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border-radius: 2px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
 }
 
 .sidebar-header {
