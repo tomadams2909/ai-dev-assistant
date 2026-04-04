@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from pathlib import Path
-from orchestrator import query, query_stream
+from orchestrator import query, query_stream, review_file
 from ingest import ingest
 from config import CODE_MODEL, REASONING_MODEL, PROVIDER, VECTOR_STORE
 from memory import Session, new_session, load_session, list_sessions, delete_session
@@ -61,6 +61,12 @@ class StreamRequest(BaseModel):
     model:        str = CODE_MODEL
     n_results:    int = 5
 
+class ReviewRequest(BaseModel):
+    filepath:     str
+    project_name: str
+    session_id:   str = "default"
+    model:        str = CODE_MODEL
+
 
 # ── Routes ────────────────────────────────────────────────────────
 @app.get("/")
@@ -103,7 +109,16 @@ def ingest_project(request: IngestRequest):
     """
     try:
         ingest(request.project_path)
-        project_name = Path(request.project_path).resolve().name
+        project_root = Path(request.project_path).resolve()
+        project_name = project_root.name
+
+        # Persist project root so review_file can recover the absolute path later
+        meta_path = VECTOR_STORE / project_name / "_rex_meta.json"
+        meta_path.write_text(
+            json.dumps({"project_root": str(project_root)}),
+            encoding="utf-8",
+        )
+
         return IngestResponse(
             success=True,
             message=f"Successfully indexed '{project_name}'",
@@ -231,6 +246,49 @@ def stream_query(request: StreamRequest):
             "Cache-Control":    "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@app.post("/review", response_model=QueryResponse)
+def review_file_endpoint(request: ReviewRequest):
+    """
+    Load a full file into context and return a structured code review.
+    Does not use RAG — the entire file is passed directly to the model.
+    """
+    allowed_models = {CODE_MODEL, REASONING_MODEL}
+    if request.model not in allowed_models:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid model. Choose from: {allowed_models}"
+        )
+
+    session = sessions.get(request.session_id)
+    if session is None:
+        session = load_session(request.session_id)
+    if session is None:
+        session = new_session(request.project_name, session_id=request.session_id)
+
+    try:
+        answer, session = review_file(
+            filepath=request.filepath,
+            project_name=request.project_name,
+            session=session,
+            model=request.model,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    sessions[session.session_id] = session
+
+    return QueryResponse(
+        answer=answer,
+        session_id=session.session_id,
+        model_used=request.model,
+        sources=[],
     )
 
 

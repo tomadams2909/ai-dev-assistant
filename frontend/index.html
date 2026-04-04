@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>REX — Repository Engineering eXpert</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    .review-pill {
+      display: inline-block;
+      font-size: 0.68rem;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.07);
+      color: #888;
+      margin-bottom: 8px;
+      letter-spacing: 0.03em;
+    }
+  </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
   <!-- Prism VS Code Dark+ syntax theme -->
@@ -383,6 +395,13 @@
     document.getElementById("question-input").value = "";
     autoResize(document.getElementById("question-input"));
 
+    // Detect "review <filepath>" — route to /review instead of /stream
+    const reviewMatch = question.match(/^review\s+(.+\.\w+)$/i);
+    if (reviewMatch) {
+      await sendReview(reviewMatch[1]);
+      return;
+    }
+
     isLoading = true;
     document.getElementById("send-btn").disabled = true;
 
@@ -446,6 +465,65 @@
 
     isLoading = false;
     document.getElementById("send-btn").disabled = false;
+  }
+
+  // ── File review ──────────────────────────────────────
+  async function sendReview(filepath) {
+    const project = document.getElementById("project-name").value.trim();
+    if (!project) { appendMessage("system", "Set a project name in the sidebar first."); return; }
+
+    isLoading = true;
+    document.getElementById("send-btn").disabled = true;
+
+    const bubbleId = appendStreamingBubble();
+
+    try {
+      const res  = await fetch(`${API}/review`, {
+        method:  "POST",
+        headers: {"Content-Type": "application/json"},
+        body:    JSON.stringify({
+          filepath,
+          project_name: project,
+          session_id:   sessionId,
+          model:        currentModel,
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        removeStreamingBubble(bubbleId);
+        appendMessage("system", `Error: ${data.detail}`);
+      } else {
+        finalizeReviewBubble(bubbleId, data.answer);
+      }
+    } catch (e) {
+      removeStreamingBubble(bubbleId);
+      appendMessage("system", "Could not reach REX server.");
+    }
+
+    isLoading = false;
+    document.getElementById("send-btn").disabled = false;
+  }
+
+  function finalizeReviewBubble(id, answer) {
+    document.getElementById(id + "-loader")?.remove();
+    const wrap = document.getElementById(id);
+    if (!wrap) return;
+
+    wrap.dataset.raw = answer;
+    renderMarkdownIntoBubble(wrap);
+
+    const bubble = wrap.querySelector(".bubble");
+    addCopyButtons(bubble.querySelector(".md"));
+    bubble.querySelector(".stream-cursor")?.remove();
+
+    // Prepend "File review" pill
+    const pill = document.createElement("span");
+    pill.className   = "review-pill";
+    pill.textContent = "File review";
+    bubble.prepend(pill);
+
+    document.getElementById("chat-window").scrollTop =
+      document.getElementById("chat-window").scrollHeight;
   }
 
   // ── Clear session ────────────────────────────────────

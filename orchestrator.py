@@ -1,8 +1,10 @@
 # orchestrator.py
+import json
 import re
+from pathlib import Path
 from typing import Iterator
 from retriever import retrieve
-from config import CODE_MODEL
+from config import CODE_MODEL, VECTOR_STORE
 from models.provider import get_provider
 from memory import Session, build_messages, trim_history, save_session
 
@@ -174,6 +176,82 @@ def query_stream(
     session.full_log.append({"role": "assistant",  "content": answer})
     trim_history(session)
     save_session(session)
+
+
+# ── File review ───────────────────────────────────────────────────
+def review_file(
+    filepath: str,
+    project_name: str,
+    session: Session,
+    model: str = CODE_MODEL,
+) -> tuple[str, Session]:
+    """
+    Load an entire file into context and run a structured code review.
+
+    Does NOT use RAG retrieval — the full file is passed directly to the model.
+    Only a clean summary is stored in session history, never the raw file contents.
+
+    Raises:
+        FileNotFoundError: Project metadata or target file not found.
+        ValueError:        File exceeds MAX_FILE_TOKENS or path traversal detected.
+    """
+    from tools.file_reader import read_full_file, estimate_tokens, MAX_FILE_TOKENS
+
+    # Recover the original project root from metadata saved at ingest time
+    meta_path = VECTOR_STORE / project_name / "_rex_meta.json"
+    if not meta_path.exists():
+        raise FileNotFoundError(
+            f"No ingest metadata found for project '{project_name}'. "
+            f"Re-index the project via the sidebar to enable file review."
+        )
+
+    meta         = json.loads(meta_path.read_text(encoding="utf-8"))
+    project_root = meta["project_root"]
+
+    file_contents   = read_full_file(filepath, project_root)
+    token_estimate  = estimate_tokens(file_contents)
+
+    if token_estimate > MAX_FILE_TOKENS:
+        raise ValueError(
+            f"'{filepath}' is too large for local review "
+            f"(~{token_estimate:,} estimated tokens; limit is {MAX_FILE_TOKENS:,}). "
+            f"Use God Mode for large files."
+        )
+
+    review_prompt = (
+        f"Please review the following file and provide a structured analysis.\n\n"
+        f"File: {filepath}\n\n"
+        f"```\n{file_contents}\n```\n\n"
+        f"Provide your analysis in these four sections — "
+        f"cite line numbers wherever possible:\n\n"
+        f"## Bugs\n"
+        f"Any bugs, logic errors, or incorrect behaviour.\n\n"
+        f"## Security Issues\n"
+        f"Any vulnerabilities such as injection, path traversal, secrets exposure, etc.\n\n"
+        f"## Code Quality\n"
+        f"Maintainability, readability, or structural concerns.\n\n"
+        f"## Improvement Suggestions\n"
+        f"Concrete suggestions to improve the code.\n\n"
+        f"If a section has no findings, write \"None identified.\""
+    )
+
+    messages = build_messages(session)
+    messages.append({"role": "user", "content": review_prompt})
+
+    raw_answer = get_provider(model=model).chat(SYSTEM_PROMPT, messages)
+    answer     = re.sub(r"<think>.*?</think>", "", raw_answer, flags=re.DOTALL).strip()
+
+    # Store only a clean label — never the full file contents
+    clean_label = f"[File review] {filepath}"
+    session.history.append({"role": "user",      "content": clean_label})
+    session.history.append({"role": "assistant",  "content": answer})
+    session.full_log.append({"role": "user",      "content": clean_label})
+    session.full_log.append({"role": "assistant",  "content": answer})
+
+    trim_history(session)
+    save_session(session)
+
+    return answer, session
 
 
 # ── CLI entry point ───────────────────────────────────────────────
