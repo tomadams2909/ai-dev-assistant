@@ -131,7 +131,7 @@
         <div class="model-item-row">
           <button id="btn-claude" class="model-item" onclick="setExternalModel('claude')" disabled>
             <span class="model-item-name">Claude <span class="api-badge">API</span></span>
-            <span class="model-item-id">Sonnet 4.6 · </span>
+            <span class="model-item-id">Sonnet 4.6 · Most Powerful</span>
           </button>
           <button class="model-info-btn" onclick="openUsageModal('claude')" aria-label="Claude usage info" title="Usage info">ⓘ</button>
         </div>
@@ -145,7 +145,7 @@
         <div class="model-item-row">
           <button id="btn-gemini" class="model-item" onclick="setExternalModel('gemini')" disabled>
             <span class="model-item-name">Gemini <span class="api-badge">API</span></span>
-            <span class="model-item-id">2.5 Flash · 1M context</span>
+            <span class="model-item-id">2.5 Flash · 1M context window</span>
           </button>
           <button class="model-info-btn" onclick="openUsageModal('gemini')" aria-label="Gemini usage info" title="Usage info">ⓘ</button>
         </div>
@@ -407,6 +407,13 @@
       </div>
     </div>
 
+    <button id="scroll-to-bottom" class="scroll-to-bottom-btn" hidden onclick="scrollToBottom()">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+           stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3,6 8,11 13,6"/>
+      </svg>
+    </button>
+
     <div class="input-area">
       <div class="input-row">
         <textarea
@@ -418,10 +425,8 @@
           oninput="autoResize(this)"
         ></textarea>
         <button class="btn-send" onclick="sendQuery()" id="send-btn">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"/>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+            <path d="M6 3l9 6-9 6V3z"/>
           </svg>
         </button>
       </div>
@@ -876,16 +881,18 @@
 
     const tokenCount = Math.round((wrap.dataset.raw || '').length / 4);
     wrap.dataset.tokenCount = tokenCount;
+    const model = currentModel || '';
+    wrap.dataset.modelName = model;
+
     if (showTokenCount) {
       const src = document.createElement("div");
       src.className = "sources";
-      src.innerHTML = "<span class='sources-label'>Sources</span>" +
-        `<span class="source-chip token-chip">~${tokenCount} tokens</span>`;
+      const label = model ? `${model}\u2003~${tokenCount} tokens` : `~${tokenCount} tokens`;
+      src.innerHTML = `<span class="source-chip token-chip">${label}</span>`;
       wrap.appendChild(src);
     }
 
-    document.getElementById("chat-window").scrollTop =
-      document.getElementById("chat-window").scrollHeight;
+    smartScroll(document.getElementById("chat-window"));
 
     if (activeExternalProvider) refreshUsage();
   }
@@ -929,7 +936,7 @@
   }
 
   // ── DOM helpers ──────────────────────────────────────
-  function appendMessage(role, text, sources = []) {
+  function appendMessage(role, text) {
     const chat = document.getElementById("chat-window");
     const wrap = document.createElement("div");
     wrap.className = `message ${role}`;
@@ -938,16 +945,6 @@
     bubble.className = "bubble";
     bubble.textContent = text;
     wrap.appendChild(bubble);
-
-    if (sources && sources.length > 0) {
-      const src = document.createElement("div");
-      src.className = "sources";
-      src.innerHTML = "<span class='sources-label'>Sources</span>" +
-        sources.map(s =>
-          `<span class="source-chip">${s.filepath}:${s.start_line}</span>`
-        ).join("");
-      wrap.appendChild(src);
-    }
 
     const welcome = chat.querySelector(".welcome");
     if (welcome) welcome.remove();
@@ -1019,8 +1016,7 @@
     clearTimeout(debounceTimers.get(id));
     debounceTimers.set(id, setTimeout(() => {
       renderMarkdownIntoBubble(wrap);
-      document.getElementById("chat-window").scrollTop =
-        document.getElementById("chat-window").scrollHeight;
+      smartScroll(document.getElementById("chat-window"));
     }, delay));
   }
 
@@ -1040,25 +1036,18 @@
 
     const tokenCount = Math.round((wrap.dataset.raw || '').length / 4);
     wrap.dataset.tokenCount = tokenCount;
+    const model = currentModel || '';
+    wrap.dataset.modelName = model;
 
-    const hasSources = sources && sources.length > 0;
-    if (hasSources || showTokenCount) {
+    if (showTokenCount) {
       const src = document.createElement("div");
       src.className = "sources";
-      src.innerHTML = "<span class='sources-label'>Sources</span>";
-      if (showTokenCount) {
-        src.innerHTML += `<span class="source-chip token-chip">~${tokenCount} tokens</span>`;
-      }
-      if (hasSources) {
-        src.innerHTML += sources.map(s =>
-          `<span class="source-chip">${s.filepath}:${s.start_line}</span>`
-        ).join("");
-      }
+      const label = model ? `${model}\u2003~${tokenCount} tokens` : `~${tokenCount} tokens`;
+      src.innerHTML = `<span class="source-chip token-chip">${label}</span>`;
       wrap.appendChild(src);
     }
 
-    document.getElementById("chat-window").scrollTop =
-      document.getElementById("chat-window").scrollHeight;
+    smartScroll(document.getElementById("chat-window"));
 
     if (activeExternalProvider) refreshUsage();
   }
@@ -1081,6 +1070,31 @@
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   }
+
+  // ── Smart auto-scroll ────────────────────────────────
+  function isNearBottom(el) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= 100;
+  }
+
+  function smartScroll(el) {
+    if (isNearBottom(el)) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }
+
+  function scrollToBottom() {
+    const chat = document.getElementById('chat-window');
+    chat.scrollTop = chat.scrollHeight;
+    document.getElementById('scroll-to-bottom').hidden = true;
+  }
+
+  (function initScrollButton() {
+    const chat    = document.getElementById('chat-window');
+    const btn     = document.getElementById('scroll-to-bottom');
+    chat.addEventListener('scroll', () => {
+      btn.hidden = isNearBottom(chat);
+    });
+  })();
 
   // ── Accent colour ────────────────────────────────────
   function hexToHsl(hex) {
@@ -1677,16 +1691,13 @@
           if (!srcDiv) {
             srcDiv = document.createElement('div');
             srcDiv.className = 'sources';
-            srcDiv.innerHTML = "<span class='sources-label'>Sources</span>";
             msg.appendChild(srcDiv);
           }
           const chip = document.createElement('span');
           chip.className   = 'source-chip token-chip';
-          chip.textContent = `~${tc} tokens`;
-          const label = srcDiv.querySelector('.sources-label');
-          if (label && label.nextSibling) srcDiv.insertBefore(chip, label.nextSibling);
-          else if (label) srcDiv.appendChild(chip);
-          else srcDiv.insertBefore(chip, srcDiv.firstChild);
+          const modelName  = msg.dataset.modelName || '';
+          chip.textContent = modelName ? `${modelName}\u2003~${tc} tokens` : `~${tc} tokens`;
+          srcDiv.appendChild(chip);
         }
       } else {
         msg.querySelectorAll('.token-chip').forEach(c => c.remove());

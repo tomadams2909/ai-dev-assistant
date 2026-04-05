@@ -251,6 +251,7 @@ body { display: flex; height: 100vh; overflow: hidden; position: relative; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 .hidden {
@@ -266,11 +267,41 @@ body { display: flex; height: 100vh; overflow: hidden; position: relative; }
   flex-direction: column;
   gap: 24px;
   scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
 }
 
-.chat-window::-webkit-scrollbar       { width: 4px; }
+.chat-window::-webkit-scrollbar       { width: 3px; }
 .chat-window::-webkit-scrollbar-track { background: transparent; }
 .chat-window::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+.chat-window::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* ── Scroll-to-bottom button ──────────────────────────── */
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: 108px;
+  right: 24px;
+  background: var(--border-2);
+  border: 1px solid var(--border-2);
+  border-radius: 50%;
+  color: var(--accent);
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, background 0.15s;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.scroll-to-bottom-btn[hidden] { display: none !important; }
+
+.scroll-to-bottom-btn:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--border-2));
+}
 
 /* ── Welcome ──────────────────────────────────────────── */
 .welcome {
@@ -524,7 +555,15 @@ body { display: flex; height: 100vh; overflow: hidden; position: relative; }
   resize: none;
   line-height: 1.6;
   max-height: 160px;
+  padding: 7px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
 }
+
+.question-input::-webkit-scrollbar       { width: 3px; }
+.question-input::-webkit-scrollbar-track { background: transparent; }
+.question-input::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+.question-input::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
 .question-input::placeholder { color: var(--text-3); }
 
@@ -1020,7 +1059,7 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 3px; }
   background: var(--bg-3);
   border: 1px solid var(--border-2);
   border-radius: var(--radius);
-  color: var(--text-3);
+  color: var(--accent-dim);
   cursor: pointer;
   font-size: 15px;
   padding: 0 8px;
@@ -1032,7 +1071,7 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 3px; }
 }
 
 .model-info-btn:hover {
-  color: var(--text-2);
+  color: var(--accent);
   border-color: var(--text-3);
 }
 
