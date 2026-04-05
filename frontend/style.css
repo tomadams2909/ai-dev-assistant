@@ -951,6 +951,34 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 3px; }
   color: color-mix(in srgb, var(--bg) 65%, transparent);
 }
 
+.free-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+  border: 1px solid color-mix(in srgb, #22c55e 32%, transparent);
+  color: #22c55e;
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.model-item.active .free-badge {
+  background: color-mix(in srgb, var(--bg) 20%, transparent);
+  border-color: color-mix(in srgb, var(--bg) 35%, transparent);
+  color: color-mix(in srgb, var(--bg) 65%, transparent);
+}
+
+.modal-free-note {
+  font-size: 11px;
+  color: #22c55e;
+  text-align: center;
+  margin: -4px 0 8px;
+}
+
+.modal-free-note[hidden] { display: none; }
+
 /* ── Cloud group divider ──────────────────────────── */
 .model-group-divider {
   display: flex;

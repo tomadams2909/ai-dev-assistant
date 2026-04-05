@@ -1,14 +1,21 @@
 from pathlib import Path
 
-# ── Model settings ────────────────────────────────────────────────
+# ── Local provider models ──────────────────────────────────────
+# Local models (qwen2.5-coder, qwen3.5:9b) — privacy, zero cost, offline capability
 PROVIDER         = "ollama"
 EMBEDDING_MODEL  = "nomic-embed-text"
 CODE_MODEL       = "qwen2.5-coder:7b"   # used for code explanation and analysis
-REASONING_MODEL  = "deepseek-r1:7b"     # used for broader reasoning and conversation
+REASONING_MODEL  = "qwen3.5:9b"     # used for broader reasoning and conversation
 
-# ── External provider settings ────────────────────────────────────
-CLAUDE_MODEL      = "claude-sonnet-4-6"
-GOD_MODE_PROVIDER = "claude"
+# ── External provider models ──────────────────────────────────────
+# Claude Sonnet 4.6  — highest quality reasoning for complex review and analysis tasks
+CLAUDE_MODEL     = "claude-sonnet-4-6"
+
+# Groq: free cloud tier, Llama 3.3 70B (10x more parameters than local), 500+ tokens/sec
+GROQ_MODEL       = "llama-3.3-70b-versatile"
+
+# Gemini: unique 1M token context window — handles entire codebases in one request
+GEMINI_MODEL     = "gemini-2.5-flash"
 
 # ── Project index store ───────────────────────────────────────────
 REX_HOME     = Path.home() / ".rex"

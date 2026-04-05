@@ -131,9 +131,23 @@
         <div class="model-item-row">
           <button id="btn-claude" class="model-item" onclick="setExternalModel('claude')" disabled>
             <span class="model-item-name">Claude <span class="api-badge">API</span></span>
-            <span class="model-item-id">Sonnet 4.6</span>
+            <span class="model-item-id">Sonnet 4.6 · </span>
           </button>
           <button class="model-info-btn" onclick="openUsageModal('claude')" aria-label="Claude usage info" title="Usage info">ⓘ</button>
+        </div>
+        <div class="model-item-row">
+          <button id="btn-groq" class="model-item" onclick="setExternalModel('groq')" disabled>
+            <span class="model-item-name">Groq <span class="free-badge">Free</span></span>
+            <span class="model-item-id">Llama 3.3 70B · 500+ tokens/sec</span>
+          </button>
+          <button class="model-info-btn" onclick="openUsageModal('groq')" aria-label="Groq usage info" title="Usage info">ⓘ</button>
+        </div>
+        <div class="model-item-row">
+          <button id="btn-gemini" class="model-item" onclick="setExternalModel('gemini')" disabled>
+            <span class="model-item-name">Gemini <span class="api-badge">API</span></span>
+            <span class="model-item-id">2.5 Flash · 1M context</span>
+          </button>
+          <button class="model-info-btn" onclick="openUsageModal('gemini')" aria-label="Gemini usage info" title="Usage info">ⓘ</button>
         </div>
       </div>
     </div>
@@ -186,6 +200,7 @@
           <span id="modal-cost" class="usage-stat-val modal-cost">$0.0000</span>
         </div>
       </div>
+      <div id="modal-free-note" class="modal-free-note" hidden>This provider is free</div>
       <button class="usage-modal-reset" onclick="resetUsage()">Reset</button>
     </div>
   </div>
@@ -617,10 +632,10 @@
 
   // ── Model selection ───────────────────────────────────
   function setModel(type) {
-    // Deselect Claude if it was active
-    if (claudeActive) {
-      claudeActive = false;
-      document.getElementById('btn-claude').classList.remove('active');
+    // Deselect any active external provider
+    if (activeExternalProvider) {
+      document.getElementById(`btn-${activeExternalProvider}`).classList.remove('active');
+      activeExternalProvider = null;
     }
     const isCode = type === 'code';
     currentModel = isCode ? window.CODE_MODEL : window.REASONING_MODEL;
@@ -629,17 +644,23 @@
   }
 
   function setExternalModel(provider) {
-    if (!godModeAvailable) return;
+    const btn = document.getElementById(`btn-${provider}`);
+    if (!btn || btn.disabled) return;
+
     // Deselect all local models
     document.getElementById('btn-code').classList.remove('active');
     document.getElementById('btn-reasoning').classList.remove('active');
 
-    if (provider === 'claude') {
-      claudeActive = true;
-      currentModel = window.CLAUDE_MODEL;
-      document.getElementById('btn-claude').classList.add('active');
+    // Deselect any previously active external provider
+    if (activeExternalProvider && activeExternalProvider !== provider) {
+      document.getElementById(`btn-${activeExternalProvider}`).classList.remove('active');
     }
-    // Phase 5: add additional cloud providers here
+
+    activeExternalProvider = provider;
+    btn.classList.add('active');
+
+    const modelMap = { claude: window.CLAUDE_MODEL, groq: window.GROQ_MODEL, gemini: window.GEMINI_MODEL };
+    currentModel = modelMap[provider];
   }
 
   // ── Ingest project ───────────────────────────────────
@@ -866,7 +887,7 @@
     document.getElementById("chat-window").scrollTop =
       document.getElementById("chat-window").scrollHeight;
 
-    if (claudeActive) refreshUsage();
+    if (activeExternalProvider) refreshUsage();
   }
 
   // ── Sidebar review trigger ───────────────────────────
@@ -982,7 +1003,6 @@
   }
 
   function appendToStreamingBubble(id, token) {
-    // Fade out and remove loader on first token
     const loader = document.getElementById(id + "-loader");
     if (loader && !loader.classList.contains('hiding')) {
       loader.classList.add('hiding');
@@ -994,12 +1014,14 @@
 
     wrap.dataset.raw += token;
 
+    const delay = activeExternalProvider === 'groq' ? 0 : 16;
+
     clearTimeout(debounceTimers.get(id));
     debounceTimers.set(id, setTimeout(() => {
       renderMarkdownIntoBubble(wrap);
       document.getElementById("chat-window").scrollTop =
         document.getElementById("chat-window").scrollHeight;
-    }, 16));
+    }, delay));
   }
 
   function finalizeStreamingBubble(id, sources) {
@@ -1038,7 +1060,7 @@
     document.getElementById("chat-window").scrollTop =
       document.getElementById("chat-window").scrollHeight;
 
-    if (claudeActive) refreshUsage();
+    if (activeExternalProvider) refreshUsage();
   }
 
   function removeStreamingBubble(id) {
@@ -1305,24 +1327,54 @@
     });
   })();
 
-  // ── God Mode ─────────────────────────────────────────
-  let claudeActive     = false;   // true when Claude (external) is the selected model
-  let godModeAvailable = false;   // true when ANTHROPIC_API_KEY is configured
+  // ── External providers ────────────────────────────────
+  // Tracks which external model (if any) is active
+  let activeExternalProvider = null;
+
+  // Provider metadata used by the usage modal
+  const PROVIDER_META = {
+    claude: { name: 'Claude', sub: 'Sonnet 4.6 · Anthropic', free: false },
+    groq:   { name: 'Groq',   sub: 'Llama 3.3 70B · Groq',  free: true  },
+    gemini: { name: 'Gemini', sub: '1.5 Flash · Google',     free: false },
+  };
 
   async function checkGodModeStatus() {
     try {
       const res  = await fetch(`${API}/god-mode/status`);
       if (!res.ok) return;
       const data = await res.json();
-      godModeAvailable       = data.available;
-      window.CLAUDE_MODEL    = data.model;
-      const btn = document.getElementById('btn-claude');
-      if (!godModeAvailable) {
-        btn.disabled = true;
-        btn.title    = 'Add ANTHROPIC_API_KEY to .env to enable';
+
+      // Claude
+      window.CLAUDE_MODEL = data.claude.model;
+      const btnClaude = document.getElementById('btn-claude');
+      if (!data.claude.available) {
+        btnClaude.disabled = true;
+        btnClaude.title    = 'Add ANTHROPIC_API_KEY to .env to enable';
       } else {
-        btn.disabled = false;
-        btn.title    = '';
+        btnClaude.disabled = false;
+        btnClaude.title    = '';
+      }
+
+      // Groq
+      window.GROQ_MODEL = data.groq.model;
+      const btnGroq = document.getElementById('btn-groq');
+      if (!data.groq.available) {
+        btnGroq.disabled = true;
+        btnGroq.title    = 'Add GROQ_API_KEY to .env to enable';
+      } else {
+        btnGroq.disabled = false;
+        btnGroq.title    = '';
+      }
+
+      // Gemini
+      window.GEMINI_MODEL = data.gemini.model;
+      const btnGemini = document.getElementById('btn-gemini');
+      if (!data.gemini.available) {
+        btnGemini.disabled = true;
+        btnGemini.title    = 'Add GEMINI_API_KEY to .env to enable';
+      } else {
+        btnGemini.disabled = false;
+        btnGemini.title    = '';
       }
     } catch { /* server offline — no-op */ }
   }
@@ -1331,7 +1383,6 @@
   let activeModalProvider = null;
 
   async function refreshUsage() {
-    // Refresh modal stats if it is currently open
     if (activeModalProvider) await loadUsageIntoModal();
   }
 
@@ -1340,16 +1391,21 @@
       const res  = await fetch(`${API}/usage`);
       if (!res.ok) return;
       const data = await res.json();
-      document.getElementById('modal-input-tokens').textContent  = (data.total_input_tokens  || 0).toLocaleString();
-      document.getElementById('modal-output-tokens').textContent = (data.total_output_tokens || 0).toLocaleString();
-      document.getElementById('modal-requests').textContent      = (data.total_requests      || 0).toLocaleString();
-      document.getElementById('modal-cost').textContent          = '$' + (data.estimated_cost_usd || 0).toFixed(4);
+      const p    = activeModalProvider;
+      const bucket = data.providers && data.providers[p] ? data.providers[p] : {};
+      document.getElementById('modal-input-tokens').textContent  = (bucket.input_tokens  || 0).toLocaleString();
+      document.getElementById('modal-output-tokens').textContent = (bucket.output_tokens || 0).toLocaleString();
+      document.getElementById('modal-requests').textContent      = (bucket.requests      || 0).toLocaleString();
+      const isFree = PROVIDER_META[p] && PROVIDER_META[p].free;
+      document.getElementById('modal-cost').textContent          = '$' + (bucket.cost_usd || 0).toFixed(4);
+      document.getElementById('modal-free-note').hidden          = !isFree;
     } catch { /* server offline — no-op */ }
   }
 
   async function resetUsage() {
     try {
-      await fetch(`${API}/usage/reset`, { method: 'POST' });
+      const url = activeModalProvider ? `${API}/usage/reset?provider=${activeModalProvider}` : `${API}/usage/reset`;
+      await fetch(url, { method: 'POST' });
       document.getElementById('modal-input-tokens').textContent  = '0';
       document.getElementById('modal-output-tokens').textContent = '0';
       document.getElementById('modal-requests').textContent      = '0';
@@ -1359,6 +1415,9 @@
 
   function openUsageModal(provider) {
     activeModalProvider = provider;
+    const meta = PROVIDER_META[provider] || { name: provider, sub: '', free: false };
+    document.getElementById('modal-provider-name').textContent = meta.name;
+    document.getElementById('modal-provider-sub').textContent  = meta.sub;
     document.getElementById('usage-modal').hidden = false;
     loadUsageIntoModal();
   }

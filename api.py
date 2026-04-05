@@ -18,7 +18,7 @@ import uvicorn
 from pathlib import Path
 from orchestrator import query, query_stream, review_file_stream, _prepare_review
 from ingest import ingest
-from config import CODE_MODEL, REASONING_MODEL, PROVIDER, VECTOR_STORE, CLAUDE_MODEL
+from config import CODE_MODEL, REASONING_MODEL, PROVIDER, VECTOR_STORE, CLAUDE_MODEL, GROQ_MODEL, GEMINI_MODEL
 from usage_tracker import get_usage, reset_usage
 from memory import Session, new_session, load_session, list_sessions, delete_session
 
@@ -174,7 +174,7 @@ def query_project(request: QueryRequest):
     Ask a question about an indexed project.
     Maintains conversation history per session_id across restarts.
     """
-    allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL}
+    allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL, GROQ_MODEL, GEMINI_MODEL}
     if request.model not in allowed_models:
         raise HTTPException(
             status_code=400,
@@ -232,7 +232,7 @@ def stream_query(request: StreamRequest):
 
     The existing /query endpoint is unchanged.
     """
-    allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL}
+    allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL, GROQ_MODEL, GEMINI_MODEL}
     if request.model not in allowed_models:
         raise HTTPException(
             status_code=400,
@@ -304,7 +304,7 @@ def review_file_endpoint(request: ReviewRequest):
       {"type": "review_done", "session_id": "..."}   — stream finished
       {"type": "error",       "detail": "<msg>"}     — something went wrong
     """
-    allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL}
+    allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL, GROQ_MODEL, GEMINI_MODEL}
     if request.model not in allowed_models:
         raise HTTPException(
             status_code=400,
@@ -357,23 +357,37 @@ def review_file_endpoint(request: ReviewRequest):
 
 @app.get("/god-mode/status")
 def god_mode_status():
-    """Check whether God Mode (Claude) is available in this environment."""
+    """Check availability of all external cloud providers."""
     return {
-        "available": bool(os.environ.get("ANTHROPIC_API_KEY")),
-        "model":     CLAUDE_MODEL,
+        "claude": {
+            "available": bool(os.environ.get("ANTHROPIC_API_KEY")),
+            "model":     CLAUDE_MODEL,
+        },
+        "groq": {
+            "available": bool(os.environ.get("GROQ_API_KEY")),
+            "model":     GROQ_MODEL,
+        },
+        "gemini": {
+            "available": bool(os.environ.get("GEMINI_API_KEY")),
+            "model":     GEMINI_MODEL,
+        },
     }
 
 
 @app.get("/usage")
 def usage_stats():
-    """Return cumulative Claude token usage and estimated cost."""
+    """Return per-provider token usage and estimated costs."""
     return get_usage()
 
 
 @app.post("/usage/reset")
-def usage_reset():
-    """Zero out the Claude usage file and return the reset record."""
-    return reset_usage()
+def usage_reset(provider: str = None):
+    """
+    Reset usage data.
+    Pass ?provider=groq (or claude/gemini) to reset only that provider.
+    Omit to reset all providers.
+    """
+    return reset_usage(provider)
 
 
 @app.delete("/session/{session_id}")
