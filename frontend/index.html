@@ -1123,6 +1123,8 @@
     localStorage.setItem('rex-accent', hex);
   }
 
+  let activeModalProvider = null;
+
   updateAccent(localStorage.getItem('rex-accent') || '#c8ff00');
   checkHealth();
   initRexSprite();
@@ -1380,7 +1382,6 @@
   }
 
   // ── Usage modal data ──────────────────────────────────
-  let activeModalProvider = null;
 
   async function refreshUsage() {
     if (activeModalProvider) await loadUsageIntoModal();
