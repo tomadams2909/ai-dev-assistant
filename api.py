@@ -266,17 +266,20 @@ def stream_query(request: StreamRequest):
             # Stream complete — session was saved inside query_stream
             sessions[session.session_id] = session
 
-            from retriever import retrieve
-            raw_sources = retrieve(request.question, request.project_name, request.n_results)
-            sources = [
-                {
-                    "filepath":   s["filepath"],
-                    "start_line": s["start_line"],
-                    "end_line":   s["end_line"],
-                    "score":      s["score"],
-                }
-                for s in raw_sources
-            ]
+            if request.project_name == "__chat__":
+                sources = []
+            else:
+                from retriever import retrieve
+                raw_sources = retrieve(request.question, request.project_name, request.n_results)
+                sources = [
+                    {
+                        "filepath":   s["filepath"],
+                        "start_line": s["start_line"],
+                        "end_line":   s["end_line"],
+                        "score":      s["score"],
+                    }
+                    for s in raw_sources
+                ]
             yield f"data: {json.dumps({'type': 'done', 'session_id': session.session_id, 'sources': sources})}\n\n"
 
         except FileNotFoundError as e:
@@ -396,6 +399,16 @@ def clear_session(session_id: str):
     sessions.pop(session_id, None)
     delete_session(session_id)
     return {"cleared": session_id}
+
+
+@app.delete("/sessions/{session_id}")
+def delete_session_by_id(session_id: str):
+    """Delete a session by ID — used by the conversation history panel."""
+    sessions.pop(session_id, None)
+    found = delete_session(session_id)
+    if not found:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+    return {"deleted": session_id}
 
 
 @app.get("/sessions")

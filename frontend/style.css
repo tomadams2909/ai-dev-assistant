@@ -1828,3 +1828,110 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 3px; }
   color: var(--text-2);
   line-height: 1.6;
 }
+
+/* ── Conversation history panel ───────────────────────── */
+.conv-section {
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.conv-section-header {
+  padding: 10px 16px 6px;
+}
+
+.conv-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+.conv-list {
+  max-height: 30vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
+  padding: 4px 0 8px;
+}
+
+.conv-list::-webkit-scrollbar       { width: 3px; }
+.conv-list::-webkit-scrollbar-track { background: transparent; }
+.conv-list::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+
+.conv-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 10px 7px 12px;
+  margin: 2px 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-left-width: 2px;
+  border-left-color: transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.conv-entry:hover {
+  background: color-mix(in srgb, var(--border-2) 60%, var(--bg-3));
+  border-color: var(--border-2);
+  border-left-color: transparent;
+}
+
+.conv-entry.active {
+  border-left-color: var(--accent);
+}
+
+.conv-entry.active:hover {
+  border-left-color: var(--accent);
+}
+
+.conv-entry-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.conv-title {
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.conv-entry.active .conv-title { color: var(--text); }
+
+.conv-date {
+  font-size: 10px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
+.conv-delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: color 0.12s, opacity 0.12s;
+  flex-shrink: 0;
+}
+
+.conv-entry:hover .conv-delete-btn { opacity: 1; }
+.conv-delete-btn:hover              { color: var(--red); }
+
+.conv-empty {
+  padding: 10px 16px;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  text-align: center;
+}

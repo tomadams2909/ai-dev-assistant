@@ -126,12 +126,15 @@ def list_sessions(project_name: str = None) -> list[dict]:
             continue
         if project_name and data.get("project_name") != project_name:
             continue
+        full_log   = data.get("full_log", [])
+        first_user = next((m["content"] for m in full_log if m.get("role") == "user"), "")
         sessions.append({
             "session_id":    data["session_id"],
             "project_name":  data["project_name"],
             "created_at":    data["created_at"],
             "updated_at":    data["updated_at"],
-            "message_count": len(data.get("full_log", [])),
+            "message_count": len(full_log),
+            "preview":       first_user[:80],
         })
 
     sessions.sort(key=lambda s: s["updated_at"], reverse=True)

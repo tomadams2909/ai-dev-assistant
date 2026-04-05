@@ -21,6 +21,11 @@ Your behaviour:
 
 You are not a general chatbot. You are a codebase assistant."""
 
+CHAT_SYSTEM_PROMPT = """You are REX (Repository Engineering eXpert), a helpful AI assistant.
+
+Answer questions clearly and concisely. You can help with general programming questions, code explanations, technical concepts, debugging, and more.
+Always wrap code in fenced code blocks with an explicit language tag. Example: \`\`\`python."""
+
 
 # ── Context builder ───────────────────────────────────────────────
 def build_context(chunks: list[dict]) -> str:
@@ -127,7 +132,7 @@ def query(
     session.history.append({"role": "user",      "content": question})
     session.history.append({"role": "assistant",  "content": answer})
     session.full_log.append({"role": "user",      "content": question})
-    session.full_log.append({"role": "assistant",  "content": answer})
+    session.full_log.append({"role": "assistant",  "content": answer, "model": model})
 
     trim_history(session)
     save_session(session)
@@ -153,15 +158,19 @@ def query_stream(
     token has been yielded (i.e. after the caller exhausts this
     generator).
     """
-    chunks  = retrieve(question, session.project_name, n_results)
-    context = build_context(chunks)
-
-    user_message_with_context = f"Codebase context:\n{context}\n\nQuestion: {question}"
+    if session.project_name == "__chat__":
+        system_prompt = CHAT_SYSTEM_PROMPT
+        user_message_with_context = question
+    else:
+        system_prompt = SYSTEM_PROMPT
+        chunks  = retrieve(question, session.project_name, n_results)
+        context = build_context(chunks)
+        user_message_with_context = f"Codebase context:\n{context}\n\nQuestion: {question}"
 
     messages = build_messages(session)
     messages.append({"role": "user", "content": user_message_with_context})
 
-    raw_stream = get_provider(model=model).chat_stream(SYSTEM_PROMPT, messages)
+    raw_stream = get_provider(model=model).chat_stream(system_prompt, messages)
 
     accumulated: list[str] = []
     for token in _strip_think_stream(raw_stream):
@@ -173,7 +182,7 @@ def query_stream(
     session.history.append({"role": "user",      "content": question})
     session.history.append({"role": "assistant",  "content": answer})
     session.full_log.append({"role": "user",      "content": question})
-    session.full_log.append({"role": "assistant",  "content": answer})
+    session.full_log.append({"role": "assistant",  "content": answer, "model": model})
     trim_history(session)
     save_session(session)
 

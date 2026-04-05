@@ -56,7 +56,7 @@
 
     <!-- Top bar: New Session + Settings -->
     <div class="sidebar-topbar">
-      <button class="btn-new-session" onclick="clearSession()">New Session</button>
+      <button class="btn-new-session" onclick="clearSession()">New Conversation</button>
       <button class="btn-settings-icon" onclick="openSettings()" title="Settings" aria-label="Settings">⚙</button>
     </div>
 
@@ -77,6 +77,19 @@
       </div>
     </div>
 
+    <!-- Collapsible: Conversations -->
+    <div id="conv-collapsible" class="sidebar-collapsible open">
+      <button class="sidebar-collapsible-header" onclick="toggleSidebarSection('conv-collapsible')">
+        <span>Conversations</span>
+        <span class="sidebar-chevron">›</span>
+      </button>
+      <div class="sidebar-collapsible-content">
+        <div class="conv-list" id="conv-list">
+          <div class="conv-empty">No conversations yet</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Collapsible: Repository -->
     <div id="repo-collapsible" class="sidebar-collapsible">
       <button class="sidebar-collapsible-header" onclick="toggleSidebarSection('repo-collapsible')">
@@ -85,7 +98,9 @@
       </button>
       <div class="sidebar-collapsible-content">
         <div class="sidebar-section-inner">
-          <label class="field-label">Project</label>
+          <div class="model-group-divider">
+            <span class="model-group-label">Project</span>
+          </div>
           <div class="project-dropdown" id="project-dropdown">
             <input
               id="project-name"
@@ -96,9 +111,9 @@
             />
             <ul class="project-suggestions" id="project-suggestions" hidden></ul>
           </div>
-        </div>
-        <div class="sidebar-section-inner">
-          <label class="field-label">Index a new project</label>
+          <div class="model-group-divider">
+            <span class="model-group-label">Index a new Project</span>
+          </div>
           <input
             id="project-path"
             class="field-input"
@@ -109,9 +124,9 @@
             Index Project
           </button>
           <div id="ingest-status" class="status-msg"></div>
-        </div>
-        <div class="sidebar-section-inner">
-          <label class="field-label">Review a file</label>
+          <div class="model-group-divider">
+            <span class="model-group-label">Review a File</span>
+          </div>
           <div class="project-dropdown" id="review-dropdown">
             <input
               id="review-filepath"
@@ -483,6 +498,7 @@
   let rexSpriteReady = false;
   let currentMode    = 'chat';
   let nResults       = 5;
+  let loadedConvId   = null;
 
   // ── Rex SVG sprite ───────────────────────────────────
   async function initRexSprite() {
@@ -662,6 +678,7 @@
         updateModelSubtitle();
         updateInputModelLabel();
         await loadProjects();
+        await loadConversationList();
       }
     } catch {
       document.getElementById("server-status").textContent = "REX offline";
@@ -818,6 +835,7 @@
               appendToStreamingBubble(bubbleId, event.content ?? "");
             } else if (event.type === "done") {
               finalizeStreamingBubble(bubbleId, event.sources);
+              loadConversationList();
             } else if (event.type === "error") {
               removeStreamingBubble(bubbleId);
               appendMessage("system", `Error: ${event.detail}`);
@@ -972,8 +990,9 @@
 
   // ── Clear session ────────────────────────────────────
   async function clearSession() {
-    await fetch(`${API}/session/${sessionId}`, { method: "DELETE" });
-    sessionId = crypto.randomUUID();
+    sessionId    = crypto.randomUUID();
+    loadedConvId = null;
+    document.querySelectorAll('.conv-entry').forEach(el => el.classList.remove('active'));
     const chat = document.getElementById("chat-window");
     const sub = currentMode === 'repo'
       ? 'Set a project name on the left, then start asking.'
@@ -1816,6 +1835,159 @@
     updateModelSubtitle();
     updateInputModelLabel();
   })();
+
+  // ── Conversation history ──────────────────────────────
+
+  function formatConvDate(isoStr) {
+    const d   = new Date(isoStr);
+    const day = d.getDate();
+    const mon = ['Jan','Feb','Mar','Apr','May','Jun',
+                 'Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    return `${day} ${mon}`;
+  }
+
+  async function loadConversationList() {
+    try {
+      const res = await fetch(`${API}/sessions`);
+      if (!res.ok) return;
+      const list = await res.json();
+      renderConvList(list);
+    } catch { /* server offline */ }
+  }
+
+  function renderConvList(convs) {
+    const list = document.getElementById('conv-list');
+    if (!list) return;
+    if (!convs.length) {
+      list.innerHTML = '<div class="conv-empty">No conversations yet</div>';
+      return;
+    }
+    list.innerHTML = convs.map(s => {
+      const raw    = s.preview || s.project_name || 'New conversation';
+      const title  = escapeHtml(raw.length > 42 ? raw.slice(0, 40) + '…' : raw);
+      const date   = formatConvDate(s.updated_at);
+      const sid    = s.session_id;
+      const active = sid === loadedConvId ? ' active' : '';
+      return `<div class="conv-entry${active}" data-sid="${sid}" onclick="loadConversation('${sid}')">` +
+               `<div class="conv-entry-body">` +
+                 `<div class="conv-title">${title}</div>` +
+                 `<div class="conv-date">${date}</div>` +
+               `</div>` +
+               `<button class="conv-delete-btn" onclick="deleteConversation('${sid}',event)" aria-label="Delete">×</button>` +
+             `</div>`;
+    }).join('');
+  }
+
+  async function loadConversation(sid) {
+    try {
+      const res = await fetch(`${API}/sessions/${sid}`);
+      if (!res.ok) return;
+      const sess = await res.json();
+
+      sessionId    = sess.session_id;
+      loadedConvId = sess.session_id;
+
+      // Switch mode based on project
+      const proj = sess.project_name || '';
+      if (proj && proj !== '__chat__') {
+        document.getElementById('project-name').value = proj;
+        setMode('repo');
+        loadFiles(proj);
+      } else {
+        setMode('chat');
+      }
+
+      // Render full log into chat
+      const chat = document.getElementById('chat-window');
+      chat.innerHTML = '';
+      const log = sess.full_log || [];
+      if (log.length === 0) {
+        chat.innerHTML =
+          '<div class="welcome">' +
+            '<div class="welcome-title">Ready.</div>' +
+            '<div class="welcome-sub">Continue this conversation…</div>' +
+          '</div>';
+      } else {
+        for (const msg of log) {
+          appendHistoryMessage(msg.role, msg.content, msg.model);
+        }
+        chat.scrollTop = chat.scrollHeight;
+      }
+
+      // Highlight active entry
+      document.querySelectorAll('.conv-entry').forEach(el => {
+        el.classList.toggle('active', el.dataset.sid === sid);
+      });
+    } catch { /* server offline */ }
+  }
+
+  async function deleteConversation(sid, event) {
+    event.stopPropagation();
+    try {
+      await fetch(`${API}/sessions/${sid}`, { method: 'DELETE' });
+    } catch { /* no-op */ }
+
+    // Remove from DOM regardless of network outcome
+    const entry = document.querySelector(`.conv-entry[data-sid="${sid}"]`);
+    if (entry) entry.remove();
+
+    // If it was loaded, reset to a fresh session
+    if (sid === loadedConvId) {
+      loadedConvId = null;
+      sessionId    = crypto.randomUUID();
+      const chat   = document.getElementById('chat-window');
+      chat.innerHTML =
+        '<div class="welcome">' +
+          '<div class="welcome-title">Ready.</div>' +
+          '<div class="welcome-sub">Start chatting with your AI assistant.</div>' +
+        '</div>';
+    }
+
+    // Show empty state if list is now empty
+    const list = document.getElementById('conv-list');
+    if (list && !list.querySelector('.conv-entry')) {
+      list.innerHTML = '<div class="conv-empty">No conversations yet</div>';
+    }
+  }
+
+  function appendHistoryMessage(role, content, model) {
+    const chat   = document.getElementById('chat-window');
+    const wrap   = document.createElement('div');
+    wrap.className = `message ${role}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+
+    if (role === 'assistant') {
+      const md = document.createElement('div');
+      md.className = 'md';
+      wrap.dataset.raw = content;
+      try {
+        md.innerHTML = marked.parse(content);
+      } catch(e) {
+        md.innerHTML = `<pre>${escapeHtml(content)}</pre>`;
+      }
+      addCopyButtons(md);
+      bubble.appendChild(md);
+      wrap.appendChild(bubble);
+
+      if (showTokenCount) {
+        const tokenCount = Math.round(content.length / 4);
+        wrap.dataset.tokenCount = tokenCount;
+        wrap.dataset.modelName  = model || '';
+        const src = document.createElement('div');
+        src.className = 'sources';
+        const label = model ? `${model}\u2003~${tokenCount} tokens` : `~${tokenCount} tokens`;
+        src.innerHTML = `<span class="source-chip token-chip">${label}</span>`;
+        wrap.appendChild(src);
+      }
+    } else {
+      bubble.textContent = content;
+      wrap.appendChild(bubble);
+    }
+
+    chat.appendChild(wrap);
+  }
 </script>
 </body>
 </html>
