@@ -205,7 +205,186 @@ body { display: flex; height: 100vh; overflow: hidden; position: relative; }
   text-align: right;
 }
 
-/* ── Sidebar footer ───────────────────────────────────── */
+/* ── Sidebar top bar ──────────────────────────────────── */
+.sidebar-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.btn-new-session {
+  background: transparent;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-new-session:hover {
+  border-color: var(--text-2);
+  color: var(--text);
+}
+
+.btn-settings-icon {
+  background: transparent;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1;
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-settings-icon:hover {
+  border-color: var(--text-2);
+  color: var(--text);
+}
+
+/* ── Mode toggle ──────────────────────────────────────── */
+.mode-toggle-section {
+  padding: 12px 16px !important;
+}
+
+.mode-toggle {
+  display: flex;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.mode-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 8px 4px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mode-btn + .mode-btn {
+  border-left: 1px solid var(--border-2);
+}
+
+.mode-btn.active {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.mode-btn:not(.active):hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+/* ── Sidebar collapsible sections ─────────────────────── */
+.sidebar-collapsible {
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-collapsible-header {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 13px 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  transition: color 0.12s;
+  text-align: left;
+}
+
+.sidebar-collapsible-header:hover { color: var(--text); }
+
+.collapsible-header-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  min-width: 0;
+}
+
+.sidebar-section-subtitle {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  color: var(--text-3);
+  text-transform: none;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-chevron {
+  font-size: 14px;
+  color: var(--text-3);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-collapsible.open .sidebar-chevron { transform: rotate(90deg); }
+
+.sidebar-collapsible-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.sidebar-collapsible.open .sidebar-collapsible-content {
+  max-height: 1400px;
+}
+
+/* ── Collapsible inner sections ───────────────────────── */
+.sidebar-section-inner {
+  padding: 14px 24px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Input meta (model label below textarea) ──────────── */
+.input-meta {
+  padding: 5px 2px 0;
+}
+
+.input-model-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.03em;
+  user-select: none;
+}
+
+/* ── Sidebar footer (legacy — kept for CSS safety) ────── */
 .sidebar-footer {
   margin-top: auto;
   padding: 20px 24px;

@@ -53,6 +53,14 @@
 
   <!-- ── Sidebar ─────────────────────────────────────────── -->
   <aside class="sidebar">
+
+    <!-- Top bar: New Session + Settings -->
+    <div class="sidebar-topbar">
+      <button class="btn-new-session" onclick="clearSession()">New Session</button>
+      <button class="btn-settings-icon" onclick="openSettings()" title="Settings" aria-label="Settings">⚙</button>
+    </div>
+
+    <!-- Logo -->
     <div class="sidebar-header">
       <div class="logo-row">
         <span id="rex-icon-slot" aria-hidden="true"></span>
@@ -61,114 +69,125 @@
       <span class="logo-sub">Repository Engineering eXpert</span>
     </div>
 
-    <div class="sidebar-section">
-      <label class="field-label">Project</label>
-      <div class="project-dropdown" id="project-dropdown">
-        <input
-          id="project-name"
-          class="field-input"
-          type="text"
-          placeholder="e.g. insurance-platform"
-          autocomplete="off"
-        />
-        <ul class="project-suggestions" id="project-suggestions" hidden></ul>
+    <!-- Mode toggle: Chat / Repo -->
+    <div class="sidebar-section mode-toggle-section">
+      <div class="mode-toggle">
+        <button id="mode-chat" class="mode-btn active" onclick="setMode('chat')">Chat</button>
+        <button id="mode-repo" class="mode-btn" onclick="setMode('repo')">Repo</button>
       </div>
     </div>
 
-    <div class="sidebar-section">
-      <label class="field-label">Index a new project</label>
-      <input
-        id="project-path"
-        class="field-input"
-        type="text"
-        placeholder="C:\tom\repos\my-project"
-      />
-      <button id="ingest-btn" class="btn-ingest" onclick="ingestProject()">
-        Index Project
+    <!-- Collapsible: Repository -->
+    <div id="repo-collapsible" class="sidebar-collapsible">
+      <button class="sidebar-collapsible-header" onclick="toggleSidebarSection('repo-collapsible')">
+        <span>Repository</span>
+        <span class="sidebar-chevron">›</span>
       </button>
-      <div id="ingest-status" class="status-msg"></div>
+      <div class="sidebar-collapsible-content">
+        <div class="sidebar-section-inner">
+          <label class="field-label">Project</label>
+          <div class="project-dropdown" id="project-dropdown">
+            <input
+              id="project-name"
+              class="field-input"
+              type="text"
+              placeholder="e.g. insurance-platform"
+              autocomplete="off"
+            />
+            <ul class="project-suggestions" id="project-suggestions" hidden></ul>
+          </div>
+        </div>
+        <div class="sidebar-section-inner">
+          <label class="field-label">Index a new project</label>
+          <input
+            id="project-path"
+            class="field-input"
+            type="text"
+            placeholder="C:\tom\repos\my-project"
+          />
+          <button id="ingest-btn" class="btn-ingest" onclick="ingestProject()">
+            Index Project
+          </button>
+          <div id="ingest-status" class="status-msg"></div>
+        </div>
+        <div class="sidebar-section-inner">
+          <label class="field-label">Review a file</label>
+          <div class="project-dropdown" id="review-dropdown">
+            <input
+              id="review-filepath"
+              class="field-input"
+              type="text"
+              placeholder="e.g. config.py or src/auth.py"
+              autocomplete="off"
+            />
+            <ul class="project-suggestions" id="review-suggestions" hidden></ul>
+          </div>
+          <button class="btn-ingest" onclick="reviewFromSidebar()">
+            Review
+          </button>
+          <div id="review-status" class="status-msg"></div>
+        </div>
+      </div>
     </div>
 
-    <div class="sidebar-section">
-      <label class="field-label">Review a file</label>
-      <div class="project-dropdown" id="review-dropdown">
-        <input
-          id="review-filepath"
-          class="field-input"
-          type="text"
-          placeholder="e.g. config.py or src/auth.py"
-          autocomplete="off"
-        />
-        <ul class="project-suggestions" id="review-suggestions" hidden></ul>
-      </div>
-      <button class="btn-ingest" onclick="reviewFromSidebar()">
-        Review
+    <!-- Collapsible: Models -->
+    <div id="model-section-collapsible" class="sidebar-collapsible">
+      <button class="sidebar-collapsible-header" onclick="toggleSidebarSection('model-section-collapsible')">
+        <div class="collapsible-header-labels">
+          <span>Models</span>
+          <span id="model-section-subtitle" class="sidebar-section-subtitle">—</span>
+        </div>
+        <span class="sidebar-chevron">›</span>
       </button>
-      <div id="review-status" class="status-msg"></div>
-    </div>
-
-    <div id="model-section" class="sidebar-section">
-      <label class="field-label">Models</label>
-      <div class="model-group-divider">
-        <span class="model-group-label">Local</span>
-      </div>
-      <div class="model-list">
-        <button id="btn-code" class="model-item active" onclick="setModel('code')">
-          <span class="model-item-name">Code</span>
-          <span class="model-item-id" id="model-label-code">—</span>
-        </button>
-        <button id="btn-reasoning" class="model-item" onclick="setModel('reasoning')">
-          <span class="model-item-name">Reasoning</span>
-          <span class="model-item-id" id="model-label-reasoning">—</span>
-        </button>
-      </div>
-
-      <div class="model-group-divider">
-        <span class="model-group-label">Cloud</span>
-      </div>
-
-      <div class="model-list">
-        <div class="model-item-row">
-          <button id="btn-claude" class="model-item" onclick="setExternalModel('claude')" disabled>
-            <span class="model-item-name">Claude <span class="api-badge">API</span></span>
-            <span class="model-item-id">Sonnet 4.6 · Most Powerful</span>
-          </button>
-          <button class="model-info-btn" onclick="openUsageModal('claude')" aria-label="Claude usage info" title="Usage info">ⓘ</button>
-        </div>
-        <div class="model-item-row">
-          <button id="btn-groq" class="model-item" onclick="setExternalModel('groq')" disabled>
-            <span class="model-item-name">Groq <span class="free-badge">Free</span></span>
-            <span class="model-item-id">Llama 3.3 70B · 500+ tokens/sec</span>
-          </button>
-          <button class="model-info-btn" onclick="openUsageModal('groq')" aria-label="Groq usage info" title="Usage info">ⓘ</button>
-        </div>
-        <div class="model-item-row">
-          <button id="btn-gemini" class="model-item" onclick="setExternalModel('gemini')" disabled>
-            <span class="model-item-name">Gemini <span class="api-badge">API</span></span>
-            <span class="model-item-id">2.5 Flash · 1M context window</span>
-          </button>
-          <button class="model-info-btn" onclick="openUsageModal('gemini')" aria-label="Gemini usage info" title="Usage info">ⓘ</button>
+      <div class="sidebar-collapsible-content">
+        <div id="model-section" class="sidebar-section-inner">
+          <div class="model-group-divider">
+            <span class="model-group-label">Local</span>
+          </div>
+          <div class="model-list">
+            <button id="btn-code" class="model-item active" onclick="setModel('code')">
+              <span class="model-item-name">Code</span>
+              <span class="model-item-id" id="model-label-code">—</span>
+            </button>
+            <button id="btn-reasoning" class="model-item" onclick="setModel('reasoning')">
+              <span class="model-item-name">Reasoning</span>
+              <span class="model-item-id" id="model-label-reasoning">—</span>
+            </button>
+          </div>
+          <div class="model-group-divider">
+            <span class="model-group-label">Cloud</span>
+          </div>
+          <div class="model-list">
+            <div class="model-item-row">
+              <button id="btn-claude" class="model-item" onclick="setExternalModel('claude')" disabled>
+                <span class="model-item-name">Claude <span class="api-badge">API</span></span>
+                <span class="model-item-id">Sonnet 4.6 · Most Powerful</span>
+              </button>
+              <button class="model-info-btn" onclick="openUsageModal('claude')" aria-label="Claude usage info" title="Usage info">ⓘ</button>
+            </div>
+            <div class="model-item-row">
+              <button id="btn-groq" class="model-item" onclick="setExternalModel('groq')" disabled>
+                <span class="model-item-name">Groq <span class="free-badge">Free</span></span>
+                <span class="model-item-id">Llama 3.3 70B · 500+ tokens/sec</span>
+              </button>
+              <button class="model-info-btn" onclick="openUsageModal('groq')" aria-label="Groq usage info" title="Usage info">ⓘ</button>
+            </div>
+            <div class="model-item-row">
+              <button id="btn-gemini" class="model-item" onclick="setExternalModel('gemini')" disabled>
+                <span class="model-item-name">Gemini <span class="api-badge">API</span></span>
+                <span class="model-item-id">2.5 Flash · 1M context window</span>
+              </button>
+              <button class="model-info-btn" onclick="openUsageModal('gemini')" aria-label="Gemini usage info" title="Usage info">ⓘ</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
 
-    <div class="sidebar-section">
-      <label class="field-label">Results per query</label>
-      <div class="slider-row">
-        <input type="range" id="n-results" min="1" max="10" value="5"
-               oninput="document.getElementById('n-results-val').textContent = this.value"/>
-        <span id="n-results-val" class="slider-val">5</span>
-      </div>
-    </div>
+    <!-- Hidden: kept for JS health-check compatibility -->
+    <div id="server-status" style="display:none"></div>
 
-    <div class="sidebar-footer">
-      <div class="footer-btn-row">
-        <button class="btn-settings" onclick="openSettings()" title="Settings" aria-label="Settings">⚙</button>
-        <button class="btn-clear" onclick="clearSession()">New Session</button>
-      </div>
-      <div id="server-status" class="server-status">Connecting...</div>
-    </div>
   </aside>
 
   <!-- ── Usage modal ───────────────────────────────────────── -->
@@ -370,6 +389,14 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
+              <div class="settings-sub">
+                <div class="settings-label">Results per query</div>
+                <div class="slider-row">
+                  <input type="range" id="n-results" min="1" max="10" value="5"
+                         oninput="nResults = parseInt(this.value); document.getElementById('n-results-val').textContent = this.value"/>
+                  <span id="n-results-val" class="slider-val">5</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -402,8 +429,8 @@
   <main class="main">
     <div id="chat-window" class="chat-window">
       <div class="welcome">
-        <div class="welcome-title">Ready to explore your codebase.</div>
-        <div class="welcome-sub">Set a project name on the left, then start asking.</div>
+        <div class="welcome-title">Ready.</div>
+        <div class="welcome-sub">Start chatting with your AI assistant.</div>
       </div>
     </div>
 
@@ -419,16 +446,20 @@
         <textarea
           id="question-input"
           class="question-input"
-          placeholder="Ask anything about your codebase..."
+          placeholder="Ask anything..."
           rows="1"
           onkeydown="handleKey(event)"
           oninput="autoResize(this)"
         ></textarea>
         <button class="btn-send" onclick="sendQuery()" id="send-btn">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
-            <path d="M6 3l9 6-9 6V3z"/>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 2L16 9L2 16L5 9Z"/>
+            <line x1="5" y1="9" x2="16" y2="9"/>
           </svg>
         </button>
+      </div>
+      <div class="input-meta">
+        <span id="input-model-label" class="input-model-label">—</span>
       </div>
     </div>
   </main>
@@ -450,6 +481,8 @@
   let currentModel   = "codellama";
   let isLoading      = false;
   let rexSpriteReady = false;
+  let currentMode    = 'chat';
+  let nResults       = 5;
 
   // ── Rex SVG sprite ───────────────────────────────────
   async function initRexSprite() {
@@ -626,6 +659,8 @@
         currentModel           = window.CODE_MODEL;
         document.getElementById('model-label-code').textContent      = window.CODE_MODEL      || '—';
         document.getElementById('model-label-reasoning').textContent = window.REASONING_MODEL || '—';
+        updateModelSubtitle();
+        updateInputModelLabel();
         await loadProjects();
       }
     } catch {
@@ -646,6 +681,8 @@
     currentModel = isCode ? window.CODE_MODEL : window.REASONING_MODEL;
     document.getElementById('btn-code').classList.toggle('active', isCode);
     document.getElementById('btn-reasoning').classList.toggle('active', !isCode);
+    updateModelSubtitle();
+    updateInputModelLabel();
   }
 
   function setExternalModel(provider) {
@@ -666,6 +703,8 @@
 
     const modelMap = { claude: window.CLAUDE_MODEL, groq: window.GROQ_MODEL, gemini: window.GEMINI_MODEL };
     currentModel = modelMap[provider];
+    updateModelSubtitle();
+    updateInputModelLabel();
   }
 
   // ── Ingest project ───────────────────────────────────
@@ -703,23 +742,31 @@
   // ── Send query (streaming) ───────────────────────────
   async function sendQuery() {
     if (isLoading) return;
+    if (!currentModel) currentModel = window.CODE_MODEL || '';
+    console.log('sendQuery called — currentModel:', currentModel, 'activeExternalProvider:', activeExternalProvider);
 
     const question = document.getElementById("question-input").value.trim();
-    const project  = document.getElementById("project-name").value.trim();
-    const nResults = parseInt(document.getElementById("n-results").value);
+    const project  = currentMode === 'repo'
+      ? document.getElementById("project-name").value.trim()
+      : '__chat__';
 
     if (!question) return;
-    if (!project)  { appendMessage("system", "Set a project name in the sidebar first."); return; }
+    if (currentMode === 'repo' && !project) {
+      appendMessage("system", "Select or index a project to start querying your codebase.");
+      return;
+    }
 
     appendMessage("user", question);
     document.getElementById("question-input").value = "";
     autoResize(document.getElementById("question-input"));
 
-    // Detect "review <filepath>" — route to /review instead of /stream
-    const reviewMatch = question.match(/^review\s+(.+\.\w+)$/i);
-    if (reviewMatch) {
-      await sendReview(reviewMatch[1]);
-      return;
+    // Detect "review <filepath>" — route to /review instead of /stream (Repo mode only)
+    if (currentMode === 'repo') {
+      const reviewMatch = question.match(/^review\s+(.+\.\w+)$/i);
+      if (reviewMatch) {
+        await sendReview(reviewMatch[1]);
+        return;
+      }
     }
 
     isLoading = true;
@@ -928,10 +975,13 @@
     await fetch(`${API}/session/${sessionId}`, { method: "DELETE" });
     sessionId = crypto.randomUUID();
     const chat = document.getElementById("chat-window");
+    const sub = currentMode === 'repo'
+      ? 'Set a project name on the left, then start asking.'
+      : 'Start chatting with your AI assistant.';
     chat.innerHTML = `
       <div class="welcome">
-        <div class="welcome-title">Ready to explore your codebase.</div>
-        <div class="welcome-sub">Set a project name on the left, then start asking.</div>
+        <div class="welcome-title">Ready.</div>
+        <div class="welcome-sub">${sub}</div>
       </div>`;
   }
 
@@ -1069,6 +1119,41 @@
   function autoResize(el) {
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }
+
+  // ── App mode ─────────────────────────────────────────
+  function setMode(mode) {
+    currentMode = mode;
+    localStorage.setItem('rex-mode', mode);
+    const isRepo = mode === 'repo';
+    document.getElementById('mode-chat').classList.toggle('active', !isRepo);
+    document.getElementById('mode-repo').classList.toggle('active', isRepo);
+    const repoSection = document.getElementById('repo-collapsible');
+    repoSection.style.display = isRepo ? '' : 'none';
+    repoSection.classList.toggle('open', isRepo);
+    document.getElementById('question-input').placeholder = isRepo
+      ? 'Ask anything about your codebase...'
+      : 'Ask anything...';
+    const welcome = document.getElementById('chat-window').querySelector('.welcome-sub');
+    if (welcome) {
+      welcome.textContent = isRepo
+        ? 'Set a project name on the left, then start asking.'
+        : 'Start chatting with your AI assistant.';
+    }
+  }
+
+  function toggleSidebarSection(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  function updateModelSubtitle() {
+    const el = document.getElementById('model-section-subtitle');
+    if (el) el.textContent = currentModel || '—';
+  }
+
+  function updateInputModelLabel() {
+    const el = document.getElementById('input-model-label');
+    if (el) el.textContent = currentModel || '—';
   }
 
   // ── Smart auto-scroll ────────────────────────────────
@@ -1725,6 +1810,11 @@
       const toggle = document.getElementById('token-count-toggle');
       if (toggle) toggle.checked = false;
     }
+
+    const savedMode = localStorage.getItem('rex-mode') || 'chat';
+    setMode(savedMode);
+    updateModelSubtitle();
+    updateInputModelLabel();
   })();
 </script>
 </body>
