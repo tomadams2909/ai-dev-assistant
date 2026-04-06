@@ -478,6 +478,13 @@
 
     <div class="input-area">
       <div class="input-row">
+        <button class="btn-icon" id="web-search-btn" onclick="toggleWebSearch()" title="Web search — requires internet connection">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        </button>
         <textarea
           id="question-input"
           class="question-input"
@@ -495,6 +502,8 @@
       </div>
       <div class="input-meta">
         <span id="input-model-label" class="input-model-label">—</span>
+        <span id="web-search-chip" class="input-chip" style="display:none;">Web</span>
+        <span id="search-method-label" class="input-search-method" style="display:none;"></span>
       </div>
     </div>
   </main>
@@ -519,6 +528,54 @@
   let currentMode    = 'chat';
   let nResults       = 5;
   let loadedConvId   = null;
+
+  // ── Web search state ─────────────────────────────────
+  let webSearchEnabled = false;
+  let searchInfo = { native: [], fallback: [] };
+
+  async function fetchSearchInfo() {
+    try {
+      const res = await fetch(`${API}/search-info`);
+      if (res.ok) searchInfo = await res.json();
+    } catch (_) { /* non-fatal */ }
+  }
+
+  function getSearchMethodForModel(model) {
+    if (!model) return null;
+    const m = model.toLowerCase();
+    if (m.includes('claude'))                       return { label: 'Native search', native: true };
+    if (m.includes('gemini'))                       return { label: 'Google search', native: true };
+    if (m.includes('llama') || m.includes('groq')) return { label: 'DuckDuckGo',    native: false };
+    return { label: 'DuckDuckGo', native: false };
+  }
+
+  function toggleWebSearch() {
+    webSearchEnabled = !webSearchEnabled;
+    updateWebSearchUI();
+  }
+
+  function updateWebSearchUI() {
+    const btn    = document.getElementById('web-search-btn');
+    const chip   = document.getElementById('web-search-chip');
+    const method = document.getElementById('search-method-label');
+    if (!btn) return;
+    if (webSearchEnabled) {
+      btn.classList.add('btn-icon--active');
+      if (chip) chip.style.display = 'inline-flex';
+      if (method) {
+        const info = getSearchMethodForModel(currentModel);
+        if (info) {
+          method.textContent   = info.label;
+          method.className     = 'input-search-method' + (info.native ? ' input-search-method--native' : '');
+          method.style.display = 'inline';
+        }
+      }
+    } else {
+      btn.classList.remove('btn-icon--active');
+      if (chip)   chip.style.display   = 'none';
+      if (method) method.style.display = 'none';
+    }
+  }
 
   // ── Connectivity state ───────────────────────────────
   let isOnline       = true;
@@ -557,6 +614,16 @@
         btn.title = '';
       }
     });
+
+    // Disable web search button when offline
+    const wsBtn = document.getElementById('web-search-btn');
+    if (wsBtn) {
+      wsBtn.disabled = !isOnline;
+      if (!isOnline && webSearchEnabled) {
+        webSearchEnabled = false;
+        updateWebSearchUI();
+      }
+    }
 
     // If a cloud model is active but cloud just became unavailable, fall back
     if (!cloudAvailable && activeExternalProvider) {
@@ -795,6 +862,7 @@
     document.getElementById('btn-reasoning').classList.toggle('active', !isCode);
     updateModelSubtitle();
     updateInputModelLabel();
+    updateWebSearchUI();
   }
 
   function setExternalModel(provider) {
@@ -817,6 +885,7 @@
     currentModel = modelMap[provider];
     updateModelSubtitle();
     updateInputModelLabel();
+    updateWebSearchUI();
   }
 
   // ── Ingest project ───────────────────────────────────
@@ -895,7 +964,8 @@
           project_name: project,
           session_id:   sessionId,
           model:        currentModel,
-          n_results:    nResults
+          n_results:    nResults,
+          web_search:   webSearchEnabled
         })
       });
 
@@ -1340,6 +1410,7 @@
 
   updateAccent(localStorage.getItem('rex-accent') || '#c8ff00');
   checkHealth();
+  fetchSearchInfo();
   initRexSprite();
   checkGodModeStatus();
   refreshUsage();

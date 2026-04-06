@@ -785,6 +785,51 @@ body { display: flex; height: 100vh; overflow: hidden; position: relative; }
 .btn-send:active   { transform: scale(0.95); }
 .btn-send:disabled { opacity: 0.3; cursor: not-allowed; }
 
+.btn-icon {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 6px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.btn-icon:hover    { color: var(--text-2); background: var(--bg-3); }
+.btn-icon:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-icon--active  { color: var(--accent) !important; }
+
+.input-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  letter-spacing: 0.04em;
+}
+
+.input-search-method {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  margin-left: 6px;
+  letter-spacing: 0.03em;
+}
+
+.input-search-method--native {
+  color: var(--accent);
+  opacity: 0.75;
+}
+
 /* ── Accent colour picker ─────────────────────────────── */
 .colour-row {
   display: flex;

@@ -10,13 +10,17 @@ from config import CODE_MODEL, REASONING_MODEL, EMBEDDING_MODEL, PROVIDER, CLAUD
 class ModelProvider(ABC):
     """Abstract base — all model providers must implement these."""
 
+    # Set True in providers that handle web search natively (Claude, Gemini).
+    # The orchestrator uses this to decide whether to prepend DuckDuckGo results.
+    HAS_NATIVE_SEARCH: bool = False
+
     @abstractmethod
-    def chat(self, system: str, messages: list[dict]) -> str:
+    def chat(self, system: str, messages: list[dict], web_search: bool = False) -> str:
         """Send a conversation and return the response string."""
         pass
 
     @abstractmethod
-    def chat_stream(self, system: str, messages: list[dict]) -> Iterator[str]:
+    def chat_stream(self, system: str, messages: list[dict], web_search: bool = False) -> Iterator[str]:
         """Stream response tokens one by one."""
         pass
 
@@ -48,7 +52,7 @@ class OllamaProvider(ModelProvider):
                 "Make sure Ollama is running — check your system tray or run 'ollama serve' in a terminal."
             )
 
-    def chat(self, system: str, messages: list[dict]) -> str:
+    def chat(self, system: str, messages: list[dict], web_search: bool = False) -> str:
         response = ollama.chat(
             model=self.chat_model,
             messages=[
@@ -58,7 +62,7 @@ class OllamaProvider(ModelProvider):
         )
         return response["message"]["content"]
 
-    def chat_stream(self, system: str, messages: list[dict]) -> Iterator[str]:
+    def chat_stream(self, system: str, messages: list[dict], web_search: bool = False) -> Iterator[str]:
         stream = ollama.chat(
             model=self.chat_model,
             messages=[
@@ -86,7 +90,10 @@ class ClaudeProvider(ModelProvider):
     Anthropic Claude Sonnet via the Anthropic API.
     Requires ANTHROPIC_API_KEY in environment.
     Embeddings always fall back to local Ollama — Claude has no embedding endpoint.
+    Native web search via web_search_20260209 tool — Claude decides autonomously whether to search.
     """
+
+    HAS_NATIVE_SEARCH = True
 
     def __init__(self):
         api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -99,25 +106,42 @@ class ClaudeProvider(ModelProvider):
         self._client = anthropic.Anthropic(api_key=api_key)
         self._model  = CLAUDE_MODEL
 
-    def chat(self, system: str, messages: list[dict]) -> str:
+    def chat(self, system: str, messages: list[dict], web_search: bool = False) -> str:
+        import logging
         from usage_tracker import track_usage
+        tools = [{"type": "web_search_20260209", "name": "web_search"}] if web_search else None
         response = self._client.messages.create(
             model=self._model,
-            max_tokens=4096,
+            max_tokens=8096,
             system=system,
             messages=messages,
+            tools=tools,
         )
         track_usage("claude", response.usage.input_tokens, response.usage.output_tokens)
-        return response.content[0].text
+        if web_search:
+            search_requests = getattr(
+                getattr(response.usage, "server_tool_use", None),
+                "web_search_requests", 0
+            )
+            logging.getLogger(__name__).info(
+                "claude: web_search_requests=%s", search_requests
+            )
+        # Find the text block — may not be first if web search was used
+        for block in response.content:
+            if getattr(block, "type", None) == "text":
+                return block.text
+        return ""
 
-    def chat_stream(self, system: str, messages: list[dict]) -> Iterator[str]:
+    def chat_stream(self, system: str, messages: list[dict], web_search: bool = False) -> Iterator[str]:
         from usage_tracker import track_usage
+        tools = [{"type": "web_search_20260209", "name": "web_search"}] if web_search else None
         final_message = None
         with self._client.messages.stream(
             model=self._model,
-            max_tokens=4096,
+            max_tokens=8096,
             system=system,
             messages=messages,
+            tools=tools,
         ) as stream:
             for text in stream.text_stream:
                 yield text
@@ -158,7 +182,7 @@ class OpenAICompatibleProvider(ModelProvider):
         from openai import OpenAI
         self.client = OpenAI(api_key=api_key, base_url=base_url)
 
-    def chat(self, system: str, messages: list[dict]) -> str:
+    def chat(self, system: str, messages: list[dict], web_search: bool = False) -> str:
         from usage_tracker import track_usage
         openai_messages = [{"role": "system", "content": system}, *messages]
         response = self.client.chat.completions.create(
@@ -170,7 +194,7 @@ class OpenAICompatibleProvider(ModelProvider):
             track_usage(self.provider_name, usage.prompt_tokens, usage.completion_tokens)
         return response.choices[0].message.content
 
-    def chat_stream(self, system: str, messages: list[dict]) -> Iterator[str]:
+    def chat_stream(self, system: str, messages: list[dict], web_search: bool = False) -> Iterator[str]:
         from usage_tracker import track_usage
         openai_messages = [{"role": "system", "content": system}, *messages]
         stream = self.client.chat.completions.create(
@@ -222,8 +246,11 @@ class GeminiProvider(ModelProvider):
     Requires GEMINI_API_KEY in environment.
     Key capability: 1M token context window — handles entire codebases in one request.
     Cannot extend OpenAICompatibleProvider — Google uses a different API format.
+    Native web search via Google grounding — enabled via GenerateContentConfig.
     Embeddings always raise NotImplementedError — embeddings use local Ollama.
     """
+
+    HAS_NATIVE_SEARCH = True
 
     def __init__(self):
         api_key = os.environ.get("GEMINI_API_KEY")
@@ -233,12 +260,19 @@ class GeminiProvider(ModelProvider):
         self.client        = genai.Client(api_key=api_key)
         self.provider_name = "gemini"
 
-    def chat(self, system: str, messages: list[dict]) -> str:
+    def chat(self, system: str, messages: list[dict], web_search: bool = False) -> str:
         from usage_tracker import track_usage
+        from google.genai import types as genai_types
         contents = _to_gemini_history(system, messages)
+        config = None
+        if web_search:
+            config = genai_types.GenerateContentConfig(
+                tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())]
+            )
         response = self.client.models.generate_content(
             model=GEMINI_MODEL,
             contents=contents,
+            config=config,
         )
         meta = getattr(response, "usage_metadata", None)
         if meta:
@@ -249,14 +283,21 @@ class GeminiProvider(ModelProvider):
             )
         return response.text
 
-    def chat_stream(self, system: str, messages: list[dict]) -> Iterator[str]:
+    def chat_stream(self, system: str, messages: list[dict], web_search: bool = False) -> Iterator[str]:
         from usage_tracker import track_usage
+        from google.genai import types as genai_types
         contents      = _to_gemini_history(system, messages)
         input_tokens  = 0
         output_tokens = 0
+        config = None
+        if web_search:
+            config = genai_types.GenerateContentConfig(
+                tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())]
+            )
         for chunk in self.client.models.generate_content_stream(
             model=GEMINI_MODEL,
             contents=contents,
+            config=config,
         ):
             text = getattr(chunk, "text", None)
             if text:

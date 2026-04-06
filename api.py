@@ -64,6 +64,7 @@ class QueryRequest(BaseModel):
     session_id:   str = "default"
     model:        str = CODE_MODEL
     n_results:    int = 5
+    web_search:   bool = False
 
 class QueryResponse(BaseModel):
     answer:     str
@@ -85,6 +86,7 @@ class StreamRequest(BaseModel):
     session_id:   str = "default"
     model:        str = CODE_MODEL
     n_results:    int = 5
+    web_search:   bool = False
 
 class ReviewRequest(BaseModel):
     filepath:     str
@@ -211,6 +213,7 @@ def query_project(request: QueryRequest):
             session=session,
             n_results=request.n_results,
             model=request.model,
+            web_search=request.web_search,
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -277,6 +280,7 @@ def stream_query(request: StreamRequest):
                 session=session,
                 n_results=request.n_results,
                 model=request.model,
+                web_search=request.web_search,
             ):
                 yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
@@ -373,6 +377,17 @@ def review_file_endpoint(request: ReviewRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.get("/search-info")
+def search_info():
+    """Return which providers use native search vs DuckDuckGo fallback."""
+    return {
+        "native":                    ["claude", "gemini"],
+        "fallback":                  ["groq", "ollama"],
+        "fallback_provider":         "DuckDuckGo",
+        "claude_cost_per_1000_searches": 10.00,
+    }
 
 
 @app.get("/god-mode/status")

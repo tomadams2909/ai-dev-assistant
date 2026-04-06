@@ -7,6 +7,7 @@ from retriever import retrieve
 from config import CODE_MODEL, VECTOR_STORE
 from models.provider import get_provider
 from memory import Session, build_messages, trim_history, save_session
+from tools.web_search import search as duckduckgo_search
 
 # ── System prompt ─────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are REX (Repository Engineering eXpert), an expert developer assistant with access to the user's codebase.
@@ -25,6 +26,8 @@ CHAT_SYSTEM_PROMPT = """You are REX (Repository Engineering eXpert), a helpful A
 
 Answer questions clearly and concisely. You can help with general programming questions, code explanations, technical concepts, debugging, and more.
 Always wrap code in fenced code blocks with an explicit language tag. Example: \`\`\`python."""
+
+WEB_SEARCH_NOTE = "You have access to recent web search results — use them to supplement your codebase knowledge."
 
 
 # ── Context builder ───────────────────────────────────────────────
@@ -94,6 +97,7 @@ def query(
     session: Session,
     n_results: int = 5,
     model: str = CODE_MODEL,
+    web_search: bool = False,
 ) -> tuple[str, Session]:
     """
     Ask a question about a project using RAG + session memory.
@@ -115,15 +119,27 @@ def query(
     chunks  = retrieve(question, session.project_name, n_results)
     context = build_context(chunks)
 
-    # Full user message for the model: context + question.
+    provider = get_provider(model=model)
+
+    # For providers without native search, prepend DuckDuckGo results to context.
+    # For Claude and Gemini, web_search=True is passed to the provider directly.
+    web_prefix = ""
+    if web_search and not provider.HAS_NATIVE_SEARCH:
+        results = duckduckgo_search(question)
+        if results:
+            web_prefix = results + "\n\n"
+
+    # Full user message for the model: web results (fallback only) + context + question.
     # This is NOT what gets stored in history — only the clean question is.
-    user_message_with_context = f"Codebase context:\n{context}\n\nQuestion: {question}"
+    user_message_with_context = f"{web_prefix}Codebase context:\n{context}\n\nQuestion: {question}"
+
+    system_prompt = SYSTEM_PROMPT + ("\n\n" + WEB_SEARCH_NOTE if web_search else "")
 
     # Build messages from session memory, then append the context-rich turn
     messages = build_messages(session)
     messages.append({"role": "user", "content": user_message_with_context})
 
-    raw_answer = get_provider(model=model).chat(SYSTEM_PROMPT, messages)
+    raw_answer = provider.chat(system_prompt, messages, web_search=web_search)
 
     # deepseek-r1 wraps chain-of-thought in <think>...</think> — strip it
     answer = re.sub(r"<think>.*?</think>", "", raw_answer, flags=re.DOTALL).strip()
@@ -146,6 +162,7 @@ def query_stream(
     session: Session,
     n_results: int = 5,
     model: str = CODE_MODEL,
+    web_search: bool = False,
 ) -> Iterator[str]:
     """
     Streaming variant of query().
@@ -158,19 +175,29 @@ def query_stream(
     token has been yielded (i.e. after the caller exhausts this
     generator).
     """
+    provider = get_provider(model=model)
+
+    # For providers without native search, prepend DuckDuckGo results to context.
+    # For Claude and Gemini, web_search=True is passed to the provider directly.
+    web_prefix = ""
+    if web_search and not provider.HAS_NATIVE_SEARCH:
+        results = duckduckgo_search(question)
+        if results:
+            web_prefix = results + "\n\n"
+
     if session.project_name == "__chat__":
-        system_prompt = CHAT_SYSTEM_PROMPT
-        user_message_with_context = question
+        system_prompt = CHAT_SYSTEM_PROMPT + ("\n\n" + WEB_SEARCH_NOTE if web_search else "")
+        user_message_with_context = f"{web_prefix}{question}"
     else:
-        system_prompt = SYSTEM_PROMPT
+        system_prompt = SYSTEM_PROMPT + ("\n\n" + WEB_SEARCH_NOTE if web_search else "")
         chunks  = retrieve(question, session.project_name, n_results)
         context = build_context(chunks)
-        user_message_with_context = f"Codebase context:\n{context}\n\nQuestion: {question}"
+        user_message_with_context = f"{web_prefix}Codebase context:\n{context}\n\nQuestion: {question}"
 
     messages = build_messages(session)
     messages.append({"role": "user", "content": user_message_with_context})
 
-    raw_stream = get_provider(model=model).chat_stream(system_prompt, messages)
+    raw_stream = provider.chat_stream(system_prompt, messages, web_search=web_search)
 
     accumulated: list[str] = []
     for token in _strip_think_stream(raw_stream):
