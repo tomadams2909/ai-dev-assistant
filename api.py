@@ -7,6 +7,8 @@ except ImportError:
 
 import json
 import os
+import re
+import shutil
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -122,6 +124,21 @@ def list_projects():
         return {"projects": []}
     projects = sorted(p.name for p in VECTOR_STORE.iterdir() if p.is_dir())
     return {"projects": projects}
+
+
+@app.delete("/projects/{project_name}")
+def delete_project(project_name: str):
+    """Delete an indexed project's vector store directory."""
+    if not re.fullmatch(r'[A-Za-z0-9_\-]+', project_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid project name — must contain only letters, digits, hyphens, or underscores."
+        )
+    project_dir = VECTOR_STORE / project_name
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found.")
+    shutil.rmtree(project_dir)
+    return {"deleted": project_name}
 
 
 @app.get("/files")

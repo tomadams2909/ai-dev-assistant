@@ -104,15 +104,18 @@
           <div class="model-group-divider">
             <span class="model-group-label">Project</span>
           </div>
-          <div class="project-dropdown" id="project-dropdown">
-            <input
-              id="project-name"
-              class="field-input"
-              type="text"
-              placeholder="e.g. insurance-platform"
-              autocomplete="off"
-            />
-            <ul class="project-suggestions" id="project-suggestions" hidden></ul>
+          <div class="project-input-row">
+            <div class="project-dropdown" id="project-dropdown">
+              <input
+                id="project-name"
+                class="field-input"
+                type="text"
+                placeholder="e.g. insurance-platform"
+                autocomplete="off"
+              />
+              <ul class="project-suggestions" id="project-suggestions" hidden></ul>
+            </div>
+            <button class="manage-projects-btn" onclick="openManageProjects()" title="Manage indexed projects">⋯</button>
           </div>
           <div class="model-group-divider">
             <span class="model-group-label">Index a new Project</span>
@@ -207,6 +210,20 @@
     <div id="server-status" style="display:none"></div>
 
   </aside>
+
+  <!-- ── Manage projects modal ────────────────────────────── -->
+  <div id="projects-modal" class="projects-modal-overlay" hidden>
+    <div class="projects-modal-backdrop" onclick="closeManageProjects()"></div>
+    <div class="projects-modal-card" role="dialog" aria-modal="true" aria-label="Manage indexed projects">
+      <div class="projects-modal-header">
+        <span class="projects-modal-title">Indexed Projects</span>
+        <button class="projects-modal-close" onclick="closeManageProjects()" aria-label="Close">×</button>
+      </div>
+      <div class="projects-list" id="projects-list">
+        <div class="projects-empty">No indexed projects</div>
+      </div>
+    </div>
+  </div>
 
   <!-- ── Usage modal ───────────────────────────────────────── -->
   <div id="usage-modal" class="usage-modal-overlay" hidden>
@@ -2043,6 +2060,102 @@
 
     chat.appendChild(wrap);
   }
+
+  // ── Manage projects modal ─────────────────────────────
+
+  async function openManageProjects() {
+    document.getElementById('projects-modal').hidden = false;
+    await refreshProjectsList();
+  }
+
+  function closeManageProjects() {
+    document.getElementById('projects-modal').hidden = true;
+  }
+
+  async function refreshProjectsList() {
+    const list = document.getElementById('projects-list');
+    list.innerHTML = '<div class="projects-empty">Loading…</div>';
+    try {
+      const res  = await fetch(`${API}/projects`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const projects = data.projects || [];
+      if (projects.length === 0) {
+        list.innerHTML = '<div class="projects-empty">No indexed projects</div>';
+        return;
+      }
+      list.innerHTML = projects.map(name =>
+        `<div class="project-row" id="proj-row-${escapeHtml(name)}">` +
+          `<span class="project-row-name">${escapeHtml(name)}</span>` +
+          `<button class="project-delete-btn" onclick="confirmDeleteProject('${escapeHtml(name)}')">Delete</button>` +
+        `</div>`
+      ).join('');
+    } catch {
+      list.innerHTML = '<div class="projects-empty">Could not load projects</div>';
+    }
+  }
+
+  function confirmDeleteProject(name) {
+    const row = document.getElementById(`proj-row-${name}`);
+    if (!row) return;
+    row.className = 'project-row project-row--confirm';
+    row.innerHTML =
+      `<span class="project-confirm-text">Delete <strong>${escapeHtml(name)}</strong>? This cannot be undone.</span>` +
+      `<div class="project-confirm-btns">` +
+        `<button class="project-confirm-ok" onclick="deleteProject('${escapeHtml(name)}')">Confirm</button>` +
+        `<button class="project-confirm-cancel" onclick="cancelDeleteProject('${escapeHtml(name)}')">Cancel</button>` +
+      `</div>`;
+  }
+
+  function cancelDeleteProject(name) {
+    const row = document.getElementById(`proj-row-${name}`);
+    if (!row) return;
+    row.className = 'project-row';
+    row.innerHTML =
+      `<span class="project-row-name">${escapeHtml(name)}</span>` +
+      `<button class="project-delete-btn" onclick="confirmDeleteProject('${escapeHtml(name)}')">Delete</button>`;
+  }
+
+  async function deleteProject(name) {
+    try {
+      const res = await fetch(`${API}/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        appendMessage('system', `Could not delete '${name}': ${err.detail || res.status}`);
+        cancelDeleteProject(name);
+        return;
+      }
+    } catch {
+      appendMessage('system', `Could not reach REX server.`);
+      cancelDeleteProject(name);
+      return;
+    }
+
+    // Remove row from modal list
+    document.getElementById(`proj-row-${name}`)?.remove();
+    const list = document.getElementById('projects-list');
+    if (list && !list.querySelector('.project-row')) {
+      list.innerHTML = '<div class="projects-empty">No indexed projects</div>';
+    }
+
+    // Clear project input and switch to Chat Mode if this was the active project
+    const projectInput = document.getElementById('project-name');
+    if (projectInput && projectInput.value.trim() === name) {
+      projectInput.value = '';
+      allFiles = [];
+      setMode('chat');
+    }
+
+    // Refresh the project dropdown suggestions
+    await loadProjects();
+  }
+
+  // Close on Escape
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !document.getElementById('projects-modal').hidden) {
+      closeManageProjects();
+    }
+  });
 </script>
 </body>
 </html>

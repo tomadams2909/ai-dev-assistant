@@ -1956,3 +1956,205 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 3px; }
   font-family: var(--font-mono);
   text-align: center;
 }
+
+/* ── Project input row (input + manage button) ────────── */
+.project-input-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.project-input-row .project-dropdown {
+  flex: 1;
+  min-width: 0;
+}
+
+.manage-projects-btn {
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.manage-projects-btn:hover {
+  border-color: var(--text-2);
+  color: var(--text);
+}
+
+/* ── Manage projects modal ────────────────────────────── */
+.projects-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.projects-modal-overlay[hidden] { display: none !important; }
+
+.projects-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.projects-modal-card {
+  position: relative;
+  z-index: 1;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 20px;
+  width: min(420px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+}
+
+.projects-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.projects-modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.03em;
+}
+
+.projects-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.12s;
+}
+
+.projects-modal-close:hover { color: var(--text); }
+
+.projects-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
+}
+
+.projects-empty {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+  padding: 12px 0;
+}
+
+.project-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.project-row-name {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-delete-btn {
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  border-radius: var(--radius);
+  color: var(--red);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 4px 9px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: background 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+
+.project-delete-btn:hover {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  border-color: var(--red);
+}
+
+.project-row--confirm {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.project-confirm-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--warning);
+}
+
+.project-confirm-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.project-confirm-ok {
+  background: var(--red);
+  border: none;
+  border-radius: var(--radius);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 5px 12px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: opacity 0.12s;
+}
+
+.project-confirm-ok:hover { opacity: 0.85; }
+
+.project-confirm-cancel {
+  background: none;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 5px 12px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: border-color 0.12s, color 0.12s;
+}
+
+.project-confirm-cancel:hover {
+  border-color: var(--text-2);
+  color: var(--text);
+}
