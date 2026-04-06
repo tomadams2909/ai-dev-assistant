@@ -255,6 +255,27 @@ body { display: flex; height: 100vh; overflow: hidden; position: relative; }
   color: var(--text);
 }
 
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Connectivity dot ─────────────────────────────────── */
+.conn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: default;
+  transition: background-color 0.4s ease;
+}
+
+.conn-dot--online     { background: #22c55e; }
+.conn-dot--cloud-down { background: var(--warning); }
+.conn-dot--offline    { background: var(--red); }
+
 /* ── Mode toggle ──────────────────────────────────────── */
 .mode-toggle-section {
   padding: 12px 16px !important;

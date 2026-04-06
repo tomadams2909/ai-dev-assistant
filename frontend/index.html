@@ -57,7 +57,10 @@
     <!-- Top bar: New Session + Settings -->
     <div class="sidebar-topbar">
       <button class="btn-new-session" onclick="clearSession()">New Conversation</button>
-      <button class="btn-settings-icon" onclick="openSettings()" title="Settings" aria-label="Settings">⚙</button>
+      <div class="topbar-right">
+        <span id="conn-dot" class="conn-dot conn-dot--online" title="Online — all providers available"></span>
+        <button class="btn-settings-icon" onclick="openSettings()" title="Settings" aria-label="Settings">⚙</button>
+      </div>
     </div>
 
     <!-- Logo -->
@@ -500,6 +503,76 @@
   let nResults       = 5;
   let loadedConvId   = null;
 
+  // ── Connectivity state ───────────────────────────────
+  let isOnline       = true;
+  let cloudAvailable = true;
+  const apiKeyAvailable = { claude: false, groq: false, gemini: false };
+
+  function applyConnectivityState() {
+    // Update dot
+    const dot = document.getElementById('conn-dot');
+    if (dot) {
+      if (!isOnline) {
+        dot.className = 'conn-dot conn-dot--offline';
+        dot.title     = 'Offline — local models only';
+      } else if (!cloudAvailable) {
+        dot.className = 'conn-dot conn-dot--cloud-down';
+        dot.title     = 'Local server reachable — cloud providers unreachable';
+      } else {
+        dot.className = 'conn-dot conn-dot--online';
+        dot.title     = 'Online — all providers available';
+      }
+    }
+
+    // Update cloud provider buttons
+    const keyNames = { claude: 'ANTHROPIC_API_KEY', groq: 'GROQ_API_KEY', gemini: 'GEMINI_API_KEY' };
+    ['claude', 'groq', 'gemini'].forEach(p => {
+      const btn = document.getElementById(`btn-${p}`);
+      if (!btn) return;
+      const noKey     = !apiKeyAvailable[p];
+      const noCloud   = !cloudAvailable;
+      btn.disabled    = noKey || noCloud;
+      if (noCloud && !noKey) {
+        btn.title = 'No internet connection — cloud providers unavailable';
+      } else if (noKey) {
+        btn.title = `Add ${keyNames[p]} to .env to enable`;
+      } else {
+        btn.title = '';
+      }
+    });
+
+    // If a cloud model is active but cloud just became unavailable, fall back
+    if (!cloudAvailable && activeExternalProvider) {
+      const prev = activeExternalProvider;
+      setModel('code');
+      appendMessage('system', `Connection lost — switched to local model (was ${prev})`);
+    }
+  }
+
+  async function checkCloudConnectivity() {
+    try {
+      const ctrl = new AbortController();
+      const t    = setTimeout(() => ctrl.abort(), 4000);
+      await fetch('https://1.1.1.1/cdn-cgi/trace', { signal: ctrl.signal, mode: 'no-cors' });
+      clearTimeout(t);
+      cloudAvailable = true;
+    } catch {
+      cloudAvailable = false;
+    }
+    applyConnectivityState();
+  }
+
+  function updateOnlineStatus(online) {
+    isOnline = online;
+    if (!online) cloudAvailable = false;
+    applyConnectivityState();
+    if (online) checkCloudConnectivity();
+  }
+
+  window.addEventListener('online',  () => updateOnlineStatus(true));
+  window.addEventListener('offline', () => updateOnlineStatus(false));
+  setInterval(checkCloudConnectivity, 30000);
+
   // ── Rex SVG sprite ───────────────────────────────────
   async function initRexSprite() {
     try {
@@ -666,6 +739,7 @@
     try {
       const res = await fetch(`${API}/health`);
       if (res.ok) {
+        isOnline = true;
         document.getElementById("server-status").textContent = "REX online";
         document.getElementById("server-status").className = "server-status online";
         const mRes  = await fetch(`${API}/models`);
@@ -679,8 +753,12 @@
         updateInputModelLabel();
         await loadProjects();
         await loadConversationList();
+        checkCloudConnectivity();
       }
     } catch {
+      isOnline = false;
+      cloudAvailable = false;
+      applyConnectivityState();
       document.getElementById("server-status").textContent = "REX offline";
       document.getElementById("server-status").className = "server-status offline";
       setTimeout(checkHealth, 3000);
@@ -1464,38 +1542,15 @@
       if (!res.ok) return;
       const data = await res.json();
 
-      // Claude
       window.CLAUDE_MODEL = data.claude.model;
-      const btnClaude = document.getElementById('btn-claude');
-      if (!data.claude.available) {
-        btnClaude.disabled = true;
-        btnClaude.title    = 'Add ANTHROPIC_API_KEY to .env to enable';
-      } else {
-        btnClaude.disabled = false;
-        btnClaude.title    = '';
-      }
-
-      // Groq
-      window.GROQ_MODEL = data.groq.model;
-      const btnGroq = document.getElementById('btn-groq');
-      if (!data.groq.available) {
-        btnGroq.disabled = true;
-        btnGroq.title    = 'Add GROQ_API_KEY to .env to enable';
-      } else {
-        btnGroq.disabled = false;
-        btnGroq.title    = '';
-      }
-
-      // Gemini
+      window.GROQ_MODEL   = data.groq.model;
       window.GEMINI_MODEL = data.gemini.model;
-      const btnGemini = document.getElementById('btn-gemini');
-      if (!data.gemini.available) {
-        btnGemini.disabled = true;
-        btnGemini.title    = 'Add GEMINI_API_KEY to .env to enable';
-      } else {
-        btnGemini.disabled = false;
-        btnGemini.title    = '';
-      }
+
+      apiKeyAvailable.claude = data.claude.available;
+      apiKeyAvailable.groq   = data.groq.available;
+      apiKeyAvailable.gemini = data.gemini.available;
+
+      applyConnectivityState();
     } catch { /* server offline — no-op */ }
   }
 
