@@ -3,6 +3,9 @@ import json
 import re
 from pathlib import Path
 from typing import Iterator
+
+# Compiled once; strips DeepSeek-r1 chain-of-thought blocks from non-streaming responses.
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 from retriever import retrieve
 from config import CODE_MODEL, VECTOR_STORE
 from models.provider import get_provider
@@ -18,14 +21,14 @@ Your behaviour:
 - If the answer isn't in the provided context, say so clearly — do not guess
 - When explaining code, be concise and precise
 - If asked to suggest a change, explain what to change and why, but do not apply it yet
-- Always wrap code in fenced code blocks with an explicit language tag. Example: \`\`\`python. Never use a bare \`\`\` fence with no language.
+- Always wrap code in fenced code blocks with an explicit language tag. Example: ```python. Never use a bare ``` fence with no language.
 
 You are not a general chatbot. You are a codebase assistant."""
 
 CHAT_SYSTEM_PROMPT = """You are REX (Repository Engineering eXpert), a helpful AI assistant.
 
 Answer questions clearly and concisely. You can help with general programming questions, code explanations, technical concepts, debugging, and more.
-Always wrap code in fenced code blocks with an explicit language tag. Example: \`\`\`python."""
+Always wrap code in fenced code blocks with an explicit language tag. Example: ```python."""
 
 WEB_SEARCH_NOTE = "You have access to recent web search results — use them to supplement your codebase knowledge."
 
@@ -142,7 +145,7 @@ def query(
     raw_answer = provider.chat(system_prompt, messages, web_search=web_search)
 
     # deepseek-r1 wraps chain-of-thought in <think>...</think> — strip it
-    answer = re.sub(r"<think>.*?</think>", "", raw_answer, flags=re.DOTALL).strip()
+    answer = _THINK_RE.sub("", raw_answer).strip()
 
     # Store only the clean Q&A — never code chunks
     session.history.append({"role": "user",      "content": question})
@@ -280,7 +283,7 @@ def review_file(
     messages.append({"role": "user", "content": review_prompt})
 
     raw_answer = get_provider(model=model).chat(SYSTEM_PROMPT, messages)
-    answer     = re.sub(r"<think>.*?</think>", "", raw_answer, flags=re.DOTALL).strip()
+    answer     = _THINK_RE.sub("", raw_answer).strip()
 
     session.history.append({"role": "user",      "content": clean_label})
     session.history.append({"role": "assistant",  "content": answer})
