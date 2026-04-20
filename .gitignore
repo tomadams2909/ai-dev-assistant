@@ -3,22 +3,41 @@
 .env.local
 *.env
 
-# Vector store (large binary files, rebuild locally)
+# Vector store (large binary files — rebuild locally with ingest.py)
 vector_store/
 
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .venv/
 *.egg-info/
-.pytest_cache/
+.eggs/
+dist/
+build/
 
-# Models (never commit these, they're gigabytes)
+# Test and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Models (never commit — gigabytes)
 *.gguf
 *.bin
 
-# VSCode
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# IDE
 .vscode/settings.json
+.idea/
 
 # Notes
 notes/
