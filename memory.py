@@ -1,11 +1,14 @@
 # memory.py
 import json
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
 from config import SESSION_STORE, MAX_HISTORY_MESSAGES, SUMMARY_KEEP_MESSAGES
+
+logger = logging.getLogger(__name__)
 
 
 # ── Session data model ────────────────────────────────────────────
@@ -105,11 +108,15 @@ def save_session(session: Session) -> None:
 
 
 def load_session(session_id: str) -> Optional[Session]:
-    """Load session from disk. Returns None if not found."""
+    """Load session from disk. Returns None if not found or file is corrupt."""
     path = SESSION_STORE / f"{session_id}.json"
     if not path.exists():
         return None
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        logger.warning("Corrupt session file, ignoring: %s", path)
+        return None
     return Session(**data)
 
 
