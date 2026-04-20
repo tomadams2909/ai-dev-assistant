@@ -6,7 +6,7 @@
 **A local-first AI developer assistant that understands your codebase**
 
 ![Python](https://img.shields.io/badge/Python-3.13-blue?style=flat-square&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.135-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![Ollama](https://img.shields.io/badge/Ollama-local-black?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 ![CI](https://github.com/tomadams2909/rex/actions/workflows/ci.yml/badge.svg)
@@ -167,6 +167,22 @@ In the sidebar, enter the path to any local project and click **Index Project**.
 
 ---
 
+## Running Tests
+
+The test suite covers the API endpoints, RAG injection strategy, memory management, provider abstraction, file security, and ingestion pipeline — 45 tests across 8 files.
+
+```bash
+# Install dependencies (if not already done)
+pip install -r requirements.txt
+
+# Run all tests
+pytest tests/ -v
+```
+
+Tests are isolated from real API calls — all provider keys are removed via `conftest.py` fixtures, so the suite runs offline with no credentials required.
+
+---
+
 ## Models
 
 ### Local (Ollama)
@@ -202,6 +218,7 @@ rex/
 ├── memory.py            # Session persistence, history trimming
 ├── config.py            # Model names, paths, settings
 ├── usage_tracker.py     # Per-provider token and cost tracking
+├── cli.py               # Optional terminal interface
 ├── models/
 │   └── provider.py      # ModelProvider base + all provider implementations
 ├── tools/
@@ -211,7 +228,15 @@ rex/
 │   ├── index.html       # Single-page UI
 │   └── style.css        # Dark theme, CSS variables, animations
 └── tests/
-    └── test_streaming.py
+    ├── conftest.py          # Shared fixtures (API key isolation)
+    ├── test_api.py          # Endpoint tests
+    ├── test_ingest.py       # Chunking and file scanning
+    ├── test_memory.py       # Session, history trimming, persistence
+    ├── test_orchestrator.py # RAG injection strategy
+    ├── test_provider.py     # Provider interface and factory
+    ├── test_retriever.py    # Vector store access
+    ├── test_security.py     # Path traversal protection
+    └── test_web_search.py   # Search fallback behaviour
 ```
 
 ---
