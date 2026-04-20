@@ -105,15 +105,19 @@ def query(
     """
     Ask a question about a project using RAG + session memory.
 
-    Retrieved code chunks are injected into the current turn's prompt only —
-    they are never stored in session.history, keeping the context window lean
-    across long sessions.
+    RAG injection strategy: retrieved code chunks are built into the user
+    message for this turn only and are never written to session.history.
+    This keeps the rolling context window lean across long sessions — the
+    model always gets fresh, relevant chunks rather than an ever-growing
+    pile of stale code from previous turns.
 
     Args:
         question:  The user's question
         session:   Session object (carries history, summary, project name)
         n_results: How many chunks to retrieve from the vector store
-        model:     Ollama model to use for inference
+        model:     Provider model string — routed via get_provider()
+        web_search: Append web results to context (native for Claude/Gemini,
+                    DuckDuckGo fallback for Ollama/Groq)
 
     Returns:
         answer:  The model's response (think tags stripped)
@@ -170,13 +174,16 @@ def query_stream(
     """
     Streaming variant of query().
 
-    Yields clean response tokens one by one as they arrive from Ollama.
-    <think> blocks are stripped in real time before any token reaches
-    the caller.
+    Applies the same RAG injection strategy as query(): code chunks are
+    injected into the current turn's prompt and never stored in history,
+    preventing context bloat across long sessions.
 
-    Session history is updated and persisted to disk after the last
-    token has been yielded (i.e. after the caller exhausts this
-    generator).
+    Yields clean response tokens one by one. <think> blocks from DeepSeek-r1
+    are stripped in real time via _strip_think_stream() so no reasoning tokens
+    ever reach the caller.
+
+    Session history is updated and persisted to disk after the generator is
+    exhausted — not mid-stream.
     """
     provider = get_provider(model=model)
 
