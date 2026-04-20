@@ -9,7 +9,10 @@ import json
 import os
 import re
 import shutil
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +27,10 @@ from config import CHAT_MODE, CODE_MODEL, REASONING_MODEL, PROVIDER, VECTOR_STOR
 from usage_tracker import get_usage, reset_usage
 from memory import Session, new_session, load_session, list_sessions, delete_session
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="REX — Repository Engineering eXpert")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS ──────────────────────────────────────────────────────────
 app.add_middleware(
@@ -246,7 +252,8 @@ def query_project(request: QueryRequest):
 
 
 @app.post("/stream")
-def stream_query(request: StreamRequest):
+@limiter.limit("20/minute")
+def stream_query(request: Request, body: StreamRequest):  # request required by slowapi for IP extraction
     """
     Ask a question and receive the answer as a Server-Sent Events stream.
 
@@ -259,45 +266,45 @@ def stream_query(request: StreamRequest):
     The existing /query endpoint is unchanged.
     """
     allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL, GROQ_MODEL, GEMINI_MODEL}
-    if request.model not in allowed_models:
+    if body.model not in allowed_models:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid model. Choose from: {allowed_models}"
         )
 
     # Pre-check: fail fast with 503 if God Mode key is missing
-    if request.model == CLAUDE_MODEL and not os.environ.get("ANTHROPIC_API_KEY"):
+    if body.model == CLAUDE_MODEL and not os.environ.get("ANTHROPIC_API_KEY"):
         raise HTTPException(
             status_code=503,
             detail="ANTHROPIC_API_KEY is not set. Add it to your .env file to enable God Mode.",
         )
 
     # Load session: memory cache → disk → create new
-    session = sessions.get(request.session_id)
+    session = sessions.get(body.session_id)
     if session is None:
-        session = load_session(request.session_id)
+        session = load_session(body.session_id)
     if session is None:
-        session = new_session(request.project_name, session_id=request.session_id)
+        session = new_session(body.project_name, session_id=body.session_id)
 
     def event_generator():
         try:
             for token in query_stream(
-                question=request.question,
+                question=body.question,
                 session=session,
-                n_results=request.n_results,
-                model=request.model,
-                web_search=request.web_search,
+                n_results=body.n_results,
+                model=body.model,
+                web_search=body.web_search,
             ):
                 yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
             # Stream complete — session was saved inside query_stream
             sessions[session.session_id] = session
 
-            if request.project_name == CHAT_MODE:
+            if body.project_name == CHAT_MODE:
                 sources = []
             else:
                 from retriever import retrieve
-                raw_sources = retrieve(request.question, request.project_name, request.n_results)
+                raw_sources = retrieve(body.question, body.project_name, body.n_results)
                 sources = [
                     {
                         "filepath":   s["filepath"],
@@ -325,7 +332,8 @@ def stream_query(request: StreamRequest):
 
 
 @app.post("/review")
-def review_file_endpoint(request: ReviewRequest):
+@limiter.limit("20/minute")
+def review_file_endpoint(request: Request, body: ReviewRequest):  # request required by slowapi for IP extraction  # noqa: ARG001
     """
     Stream a structured file review as Server-Sent Events.
 
@@ -335,30 +343,30 @@ def review_file_endpoint(request: ReviewRequest):
       {"type": "error",       "detail": "<msg>"}     — something went wrong
     """
     allowed_models = {CODE_MODEL, REASONING_MODEL, CLAUDE_MODEL, GROQ_MODEL, GEMINI_MODEL}
-    if request.model not in allowed_models:
+    if body.model not in allowed_models:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid model. Choose from: {allowed_models}"
         )
 
     # Pre-check: fail fast with 503 if God Mode key is missing
-    if request.model == CLAUDE_MODEL and not os.environ.get("ANTHROPIC_API_KEY"):
+    if body.model == CLAUDE_MODEL and not os.environ.get("ANTHROPIC_API_KEY"):
         raise HTTPException(
             status_code=503,
             detail="ANTHROPIC_API_KEY is not set. Add it to your .env file to enable God Mode.",
         )
 
-    session = sessions.get(request.session_id)
+    session = sessions.get(body.session_id)
     if session is None:
-        session = load_session(request.session_id)
+        session = load_session(body.session_id)
     if session is None:
-        session = new_session(request.project_name, session_id=request.session_id)
+        session = new_session(body.project_name, session_id=body.session_id)
 
     # Validate and build the prompt synchronously so errors become proper HTTP
     # responses before the stream starts — generator exceptions after 200 OK
     # can't be mapped to HTTP status codes.
     try:
-        review_prompt, clean_label = _prepare_review(request.filepath, request.project_name)
+        review_prompt, clean_label = _prepare_review(body.filepath, body.project_name)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -366,7 +374,7 @@ def review_file_endpoint(request: ReviewRequest):
 
     def event_generator():
         try:
-            for token in review_file_stream(review_prompt, clean_label, session, request.model):
+            for token in review_file_stream(review_prompt, clean_label, session, body.model):
                 yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
 
             sessions[session.session_id] = session
