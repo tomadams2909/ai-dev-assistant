@@ -1,4 +1,5 @@
 import sys
+import logging
 import ollama
 import chromadb
 from pathlib import Path
@@ -11,13 +12,15 @@ from config import (
     is_allowed
 )
 
+logger = logging.getLogger(__name__)
+
 # ── Chunking ──────────────────────────────────────────────────────
 def chunk_file(filepath: Path, project_root: Path) -> list[dict]:
     """Split a file into overlapping line-based chunks."""
     try:
         content = filepath.read_text(encoding="utf-8", errors="ignore")
     except Exception as e:
-        print(f"  Skipping {filepath.name}: {e}")
+        logger.warning("Skipping %s: %s", filepath.name, e)
         return []
 
     lines = content.splitlines()
@@ -65,18 +68,18 @@ def ingest(project_path: str):
     project_root = Path(project_path).resolve()
 
     if not project_root.exists():
-        print(f"Path does not exist: {project_root}")
+        logger.error("Path does not exist: %s", project_root)
         sys.exit(1)
 
     project_name = project_root.name
-    print(f"\nREX — Ingesting project: {project_name}")
-    print(f"Root: {project_root}")
+    logger.info("REX — Ingesting project: %s", project_name)
+    logger.info("Root: %s", project_root)
 
     client     = chromadb.PersistentClient(path=str(VECTOR_STORE / project_name))
     collection = client.get_or_create_collection(project_name)
 
     files = scan_files(project_root)
-    print(f"Found {len(files)} files to index\n")
+    logger.info("Found %d files to index", len(files))
 
     total_chunks = 0
 
@@ -85,7 +88,7 @@ def ingest(project_path: str):
         if not chunks:
             continue
 
-        print(f"  Indexing {filepath.relative_to(project_root)} → {len(chunks)} chunks")
+        logger.info("  Indexing %s → %d chunks", filepath.relative_to(project_root), len(chunks))
 
         for chunk in chunks:
             doc_id = f"{chunk['filepath']}:{chunk['start_line']}"
@@ -102,8 +105,8 @@ def ingest(project_path: str):
             )
             total_chunks += 1
 
-    print(f"\nDone. {total_chunks} chunks indexed for '{project_name}'")
-    print(f"Stored at: {VECTOR_STORE / project_name}")
+    logger.info("Done. %d chunks indexed for '%s'", total_chunks, project_name)
+    logger.info("Stored at: %s", VECTOR_STORE / project_name)
 
 
 # ── Entry point ───────────────────────────────────────────────────
