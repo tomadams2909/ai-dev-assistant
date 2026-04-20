@@ -1,8 +1,8 @@
 # retriever.py
-import ollama
 import chromadb
 from pathlib import Path
-from config import EMBEDDING_MODEL, VECTOR_STORE
+from config import VECTOR_STORE
+from models.provider import get_embedding_provider
 
 
 # ── Load a project's collection ───────────────────────────────────
@@ -29,10 +29,7 @@ def retrieve(query: str, project_name: str, n_results: int = 5) -> list[dict]:
     Returns a list of dicts with text, filepath, and line numbers.
     """
     # Convert the question into a vector
-    query_embedding = ollama.embeddings(
-        model=EMBEDDING_MODEL,
-        prompt=query
-    )["embedding"]
+    query_embedding = get_embedding_provider().embed(query)
 
     collection = load_collection(project_name)
 

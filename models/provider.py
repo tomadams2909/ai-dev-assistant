@@ -332,6 +332,12 @@ def _to_gemini_history(system: str, messages: list[dict]) -> list[dict]:
     return result
 
 
+# ── Embedding provider ────────────────────────────────────────────
+def get_embedding_provider() -> OllamaProvider:
+    """Return the provider used for text embeddings (always local Ollama)."""
+    return OllamaProvider()
+
+
 # ── Provider factory ──────────────────────────────────────────────
 def get_provider(name: str = PROVIDER, model: str = CODE_MODEL) -> ModelProvider:
     """

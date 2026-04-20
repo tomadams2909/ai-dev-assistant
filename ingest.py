@@ -1,18 +1,17 @@
 import sys
 import logging
-import ollama
 import chromadb
 from pathlib import Path
 from config import (
     CHUNK_SIZE,
     CHUNK_OVERLAP,
-    EMBEDDING_MODEL,
     VECTOR_STORE,
     ALLOWED_EXTENSIONS,
     EXCLUDED_DIRS,
     EXCLUDED_FILES,
     is_allowed
 )
+from models.provider import get_embedding_provider
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +46,6 @@ def chunk_file(filepath: Path, project_root: Path) -> list[dict]:
     return chunks
 
 
-# ── Embedding ─────────────────────────────────────────────────────
-def embed(text: str) -> list[float]:
-    """Convert text to a vector using Ollama locally."""
-    response = ollama.embeddings(model=EMBEDDING_MODEL, prompt=text, options={"num_ctx": 8192})
-    return response["embedding"]
-
-
 # ── File scanner ──────────────────────────────────────────────────
 def scan_files(project_root: Path) -> list[Path]:
     """Return all allowed files under project_root."""
@@ -81,6 +73,7 @@ def ingest(project_path: str) -> None:
     files = scan_files(project_root)
     logger.info("Found %d files to index", len(files))
 
+    embedding_provider = get_embedding_provider()
     total_chunks = 0
 
     for filepath in files:
@@ -95,7 +88,7 @@ def ingest(project_path: str) -> None:
 
             collection.upsert(
                 ids        = [doc_id],
-                embeddings = [embed(chunk["text"])],
+                embeddings = [embedding_provider.embed(chunk["text"])],
                 documents  = [chunk["text"]],
                 metadatas  = [{
                     "filepath":   chunk["filepath"],
