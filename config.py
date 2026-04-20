@@ -29,6 +29,11 @@ SUMMARY_KEEP_MESSAGES = 10    # messages retained when compressing to summary
 SESSION_STORE         = REX_HOME / "sessions"
 SESSION_STORE.mkdir(exist_ok=True)
 
+# ── Ingestion settings ────────────────────────────────────────────
+CHUNK_SIZE       = 60     # lines per chunk when indexing source files
+CHUNK_OVERLAP    = 10     # lines of overlap between consecutive chunks
+MAX_FILE_TOKENS  = 25000  # hard limit for single-file review (est. tokens)
+
 # ── Special project names ─────────────────────────────────────────
 CHAT_MODE = "__chat__"  # sentinel used when no project is indexed — general chat session
 

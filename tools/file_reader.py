@@ -1,7 +1,6 @@
 # tools/file_reader.py
 from pathlib import Path
-
-MAX_FILE_TOKENS = 25000
+from config import MAX_FILE_TOKENS
 
 
 def estimate_tokens(text: str) -> int:

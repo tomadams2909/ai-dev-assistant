@@ -4,6 +4,8 @@ import ollama
 import chromadb
 from pathlib import Path
 from config import (
+    CHUNK_SIZE,
+    CHUNK_OVERLAP,
     EMBEDDING_MODEL,
     VECTOR_STORE,
     ALLOWED_EXTENSIONS,
@@ -27,12 +29,10 @@ def chunk_file(filepath: Path, project_root: Path) -> list[dict]:
     if not lines:
         return []
 
-    chunks     = []
-    chunk_size = 60
-    overlap    = 10
+    chunks = []
 
-    for i in range(0, len(lines), chunk_size - overlap):
-        chunk_lines = lines[i : i + chunk_size]
+    for i in range(0, len(lines), CHUNK_SIZE - CHUNK_OVERLAP):
+        chunk_lines = lines[i : i + CHUNK_SIZE]
         chunk_text  = "\n".join(chunk_lines).strip()
         if not chunk_text:
             continue
