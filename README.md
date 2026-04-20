@@ -118,6 +118,24 @@ REX is built around a clean four-layer architecture:
 
 ## Getting Started
 
+### Docker (recommended)
+
+The fastest way to run REX. Starts Ollama, pulls the required models, and launches the API in one command.
+
+```bash
+docker compose up
+```
+
+Open [http://localhost:8000/app](http://localhost:8000/app) once the models finish pulling (~5 min on first run).
+
+> **No NVIDIA GPU?** Remove the `deploy` block from the `ollama` service in `docker-compose.yml` — Ollama runs on CPU, just slower.
+
+> **Cloud providers?** Copy `.env.example` to `.env`, add your API keys, and uncomment the relevant lines in `docker-compose.yml`.
+
+---
+
+### Manual Setup
+
 ### Prerequisites
 
 - Python 3.13+
@@ -238,6 +256,22 @@ rex/
     ├── test_security.py     # Path traversal protection
     └── test_web_search.py   # Search fallback behaviour
 ```
+
+---
+
+## Screenshots
+
+### RAG Query — asking a question about an indexed codebase
+![RAG query showing code context and cited answer](docs/screenshots/rag-query.png)
+
+### File Review — structured four-section analysis
+![File review output with bugs, security, quality and suggestions sections](docs/screenshots/file-review.png)
+
+### Provider Selector — switching between local and cloud models
+![Model selector showing Ollama, Claude, Groq and Gemini options](docs/screenshots/provider-selector.png)
+
+### Session History — resumable conversations in the sidebar
+![Sidebar showing past sessions with project names and previews](docs/screenshots/session-history.png)
 
 ---
 
