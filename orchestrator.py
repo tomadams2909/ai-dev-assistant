@@ -7,7 +7,7 @@ from typing import Iterator
 # Compiled once; strips DeepSeek-r1 chain-of-thought blocks from non-streaming responses.
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 from retriever import retrieve
-from config import CODE_MODEL, VECTOR_STORE
+from config import CHAT_MODE, CODE_MODEL, VECTOR_STORE
 from models.provider import get_provider
 from memory import Session, build_messages, trim_history, save_session
 from tools.web_search import search as duckduckgo_search
@@ -188,7 +188,7 @@ def query_stream(
         if results:
             web_prefix = results + "\n\n"
 
-    if session.project_name == "__chat__":
+    if session.project_name == CHAT_MODE:
         system_prompt = CHAT_SYSTEM_PROMPT + ("\n\n" + WEB_SEARCH_NOTE if web_search else "")
         user_message_with_context = f"{web_prefix}{question}"
     else:

@@ -29,6 +29,9 @@ SUMMARY_KEEP_MESSAGES = 10    # messages retained when compressing to summary
 SESSION_STORE         = REX_HOME / "sessions"
 SESSION_STORE.mkdir(exist_ok=True)
 
+# ── Special project names ─────────────────────────────────────────
+CHAT_MODE = "__chat__"  # sentinel used when no project is indexed — general chat session
+
 # ── File access rules ─────────────────────────────────────────────
 ALLOWED_EXTENSIONS = {".py", ".js", ".ts", ".sql", ".md", ".yaml", ".json", ".txt", ".html"}
 EXCLUDED_DIRS = {

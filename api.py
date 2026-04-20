@@ -20,7 +20,7 @@ import uvicorn
 from pathlib import Path
 from orchestrator import query, query_stream, review_file_stream, _prepare_review
 from ingest import ingest
-from config import CODE_MODEL, REASONING_MODEL, PROVIDER, VECTOR_STORE, CLAUDE_MODEL, GROQ_MODEL, GEMINI_MODEL
+from config import CHAT_MODE, CODE_MODEL, REASONING_MODEL, PROVIDER, VECTOR_STORE, CLAUDE_MODEL, GROQ_MODEL, GEMINI_MODEL
 from usage_tracker import get_usage, reset_usage
 from memory import Session, new_session, load_session, list_sessions, delete_session
 
@@ -287,7 +287,7 @@ def stream_query(request: StreamRequest):
             # Stream complete — session was saved inside query_stream
             sessions[session.session_id] = session
 
-            if request.project_name == "__chat__":
+            if request.project_name == CHAT_MODE:
                 sources = []
             else:
                 from retriever import retrieve
