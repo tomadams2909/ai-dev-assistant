@@ -25,7 +25,6 @@ VECTOR_STORE.mkdir(exist_ok=True)
 
 # ── Memory / session settings ─────────────────────────────────────
 MAX_HISTORY_MESSAGES  = 20   # rolling window kept in session.history
-SUMMARY_KEEP_MESSAGES = 10    # messages retained when compressing to summary
 SESSION_STORE         = REX_HOME / "sessions"
 SESSION_STORE.mkdir(exist_ok=True)
 

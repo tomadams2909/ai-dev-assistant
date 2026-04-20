@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
-from config import SESSION_STORE, MAX_HISTORY_MESSAGES, SUMMARY_KEEP_MESSAGES
+from config import SESSION_STORE, MAX_HISTORY_MESSAGES
 
 logger = logging.getLogger(__name__)
 
