@@ -35,6 +35,9 @@ Thumbs.db
 *.log
 logs/
 
+# Docker overrides
+docker-compose.override.yml
+
 # IDE
 .vscode/settings.json
 .idea/
