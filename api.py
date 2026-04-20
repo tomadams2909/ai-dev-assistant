@@ -103,8 +103,14 @@ def root():
 
 @app.get("/health")
 def health():
-    """Simple health check — useful for confirming the server is up."""
-    return {"status": "ok"}
+    """Health check — confirms the server is up and reports Ollama reachability."""
+    try:
+        import ollama
+        ollama.list()
+        ollama_ok = True
+    except Exception:
+        ollama_ok = False
+    return {"status": "ok", "ollama": ollama_ok}
 
 
 @app.get("/models")
