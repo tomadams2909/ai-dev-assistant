@@ -20,7 +20,7 @@ class Session:
     summary:      str         # plain-text compression of trimmed history
 
 
-def new_session(project_name: str, session_id: str = None) -> Session:
+def new_session(project_name: str, session_id: Optional[str] = None) -> Session:
     now = datetime.now(timezone.utc).isoformat()
     return Session(
         session_id=session_id or str(uuid.uuid4()),
@@ -113,7 +113,7 @@ def load_session(session_id: str) -> Optional[Session]:
     return Session(**data)
 
 
-def list_sessions(project_name: str = None) -> list[dict]:
+def list_sessions(project_name: Optional[str] = None) -> list[dict]:
     """
     Return session metadata dicts (no history), sorted newest-updated first.
     Optionally filtered by project_name.

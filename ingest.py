@@ -64,7 +64,7 @@ def scan_files(project_root: Path) -> list[Path]:
 
 
 # ── Main ingestion ────────────────────────────────────────────────
-def ingest(project_path: str):
+def ingest(project_path: str) -> None:
     project_root = Path(project_path).resolve()
 
     if not project_root.exists():

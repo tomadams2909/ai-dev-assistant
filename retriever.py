@@ -6,7 +6,7 @@ from config import EMBEDDING_MODEL, VECTOR_STORE
 
 
 # ── Load a project's collection ───────────────────────────────────
-def load_collection(project_name: str):
+def load_collection(project_name: str) -> chromadb.Collection:
     """Connect to the ChromaDB index for a given project."""
     store_path = VECTOR_STORE / project_name
 
@@ -63,7 +63,7 @@ def retrieve(query: str, project_name: str, n_results: int = 5) -> list[dict]:
 
 
 # ── Debug helper ──────────────────────────────────────────────────
-def retrieve_and_print(query: str, project_name: str, n_results: int = 5):
+def retrieve_and_print(query: str, project_name: str, n_results: int = 5) -> None:
     """Useful for testing retrieval quality from the terminal."""
     print(f"\nQuery: {query}")
     print(f"Project: {project_name}\n")
