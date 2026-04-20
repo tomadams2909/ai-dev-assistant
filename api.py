@@ -6,9 +6,11 @@ except ImportError:
     pass
 
 import json
+import logging
 import os
 import re
 import shutil
+import time
 from fastapi import FastAPI, HTTPException, Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -31,6 +33,18 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="REX — Repository Engineering eXpert")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── Request logging ───────────────────────────────────────────────
+logger = logging.getLogger("rex.api")
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+    logger.info("%s %s %s %.1fms", request.method, request.url.path, response.status_code, duration_ms)
+    return response
+
 
 # ── CORS ──────────────────────────────────────────────────────────
 app.add_middleware(
