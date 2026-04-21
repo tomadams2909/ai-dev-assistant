@@ -5,23 +5,22 @@
 
 **A local-first AI developer assistant that understands your codebase**
 
-![Python](https://img.shields.io/badge/Python-3.13-blue?style=flat-square&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.135-009688?style=flat-square&logo=fastapi&logoColor=white)
-![Ollama](https://img.shields.io/badge/Ollama-local-black?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![CI](https://github.com/tomadams2909/rex/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/tomadams2909/ai-dev-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/tomadams2909/ai-dev-assistant/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.13+-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.135-009688?logo=fastapi&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-[Features](#features) · [Architecture](#architecture) · [Getting Started](#getting-started) · [Models](#models) · [Screenshots](#screenshots)
+[What it is](#what-it-is) · [Architecture](#architecture) · [Stack](#stack) · [Getting Started](#getting-started) · [Features](#features) · [Testing](#testing)
 
 </div>
 
 ---
 
-## What is REX?
+## What it is
 
-REX is a local AI developer assistant that indexes your codebase using RAG (Retrieval-Augmented Generation) and lets you query it in natural language. It runs entirely on your machine by default — your code never leaves your computer unless you explicitly choose a cloud provider.
+REX indexes your codebase using RAG (Retrieval-Augmented Generation) and lets you query it in natural language. It runs entirely on your machine by default - your code never leaves your computer unless you explicitly enable a cloud provider.
 
-Ask REX to explain a function, find where authentication is handled, review a file for bugs, or chat with a cloud model that has access to your indexed project. Switch between local and cloud models on the fly. Every conversation is saved and resumable.
+Ask REX to explain a function, find where authentication is handled, review a file for bugs, or switch to a cloud model with a 1M token context window. Every conversation is persisted and resumable across restarts.
 
 ```
 "Where is token validation handled?"  →  REX retrieves the relevant code and explains it
@@ -29,56 +28,24 @@ Ask REX to explain a function, find where authentication is handled, review a fi
 "What changed in the FastAPI docs?"   →  REX searches the web and answers with citations
 ```
 
+![RAG query showing code context and cited answer](docs/screenshots/rag-query.png)
+
 ---
 
-## Features
+## Screenshots
 
-### Core Intelligence
-- **Semantic codebase search** — indexes your project using ChromaDB vector embeddings, finds relevant code by meaning not just keywords
-- **Full-file code review** — loads entire files into context and runs structured analysis across four categories: bugs, security, code quality, and improvements
-- **RAG pipeline** — retrieves the most relevant chunks for each query, keeping context lean and responses accurate
-- **Conversation memory** — sliding window history with compression, sessions persist across restarts and are fully resumable
+### File review - structured four-section analysis
+![File review output with bugs, security, quality and suggestions sections](docs/screenshots/file-review.png)
 
-### AI Provider Tier System
-| Tier | Models | Cost | Strength |
-|------|--------|------|----------|
-| Local | qwen2.5-coder:7b, qwen3.5:9b | Free, offline | Privacy, zero cost |
-| Cloud Free | Groq Llama 3.3 70B | Free | 10× local capability, 500+ tok/s |
-| Cloud Paid | Gemini 2.5 Flash | ~$0.001/query | 1M token context window |
-| Cloud Premium | Claude Sonnet 4.6 | ~$0.04/query | Highest quality reasoning |
+### Provider selector - switching between local and cloud models
+![Model selector showing Ollama, Claude, Groq and Gemini options](docs/screenshots/provider-selector.png)
 
-### Web Search
-- **Tiered web search** — each provider uses the most appropriate search method
-  - Claude → native Anthropic web search tool (autonomous, cited)
-  - Gemini → Google grounding (native SDK)
-  - Groq / Local → DuckDuckGo fallback (free, no API key)
-- Toggle per-query, automatically disabled when offline
-
-### Chat Modes
-- **Repo Mode** — full RAG pipeline with your indexed codebase
-- **Chat Mode** — direct AI conversation, no codebase required
-
-### Developer Experience
-- **Streaming responses** via Server-Sent Events — tokens appear as they are generated
-- **Syntax-highlighted code blocks** with copy button (VS Code Dark+ theme via Prism.js)
-- **Markdown rendering** for all assistant responses
-- **Smart auto-scroll** — follows generation only when already at the bottom
-- **Conversation history** — browse, resume, and delete past sessions from the sidebar
-- **Token usage tracking** — per-provider cost estimates with reset capability
-- **Offline detection** — cloud providers automatically disabled when network unavailable
-
-### Customisation
-- **Accent colour picker** — full HSB sliders, 36 curated swatches across 6 palettes
-- **Background modes** — Dark, Darker, OLED black
-- **Sidebar width** — Narrow, Normal, Wide presets with clamped percentage scaling
-- **Accessibility** — colour blind mode filters (Deuteranopia, Protanopia, Tritanopia, High Contrast)
-- **Results per query** — configurable RAG chunk retrieval count
+### Session history - resumable conversations in the sidebar
+![Sidebar showing past sessions with project names and previews](docs/screenshots/session-history.png)
 
 ---
 
 ## Architecture
-
-REX is built around a clean four-layer architecture:
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -102,47 +69,57 @@ REX is built around a clean four-layer architecture:
 └─────────────────────────────────────────────────┘
 ```
 
-### Key Design Decisions
+**Provider abstraction** - all models implement a common `ModelProvider` interface (`chat`, `chat_stream`, `embed`). Adding a new provider is one class and one config line. `OpenAICompatibleProvider` is a reusable base for any OpenAI-format API.
 
-**Provider abstraction** — all models implement a common `ModelProvider` interface with `chat()`, `chat_stream()`, and `embed()`. Switching providers or adding new ones requires one new class and one config line. `OpenAICompatibleProvider` serves as a base for any OpenAI-format API (currently Groq).
+**RAG injection strategy** - retrieved code chunks are injected into the current turn's prompt only and never written to session history. The model always gets fresh, relevant context without accumulating stale code across a long session.
 
-**Tool system** — discrete capabilities live in `tools/` as independently testable modules. The orchestrator coordinates which tools to use per request:
-- `tools/file_reader.py` — safe file loading with path traversal protection
-- `tools/web_search.py` — DuckDuckGo fallback for providers without native search
+**Streaming** - the backend yields SSE events (`token`, `done`, `error`). Think-tag blocks from reasoning models are stripped token-by-token in real time, with zero buffering latency.
 
-**Memory architecture** — conversation history uses a sliding window with compression. Code chunks retrieved for RAG are never stored in history (they are re-fetched each turn), keeping the context window lean across long sessions.
+**Safe file access** - all file operations resolve paths against the project root via `Path.resolve()` + `relative_to()` and reject anything that escapes it before the stream starts.
 
-**Streaming** — the backend yields SSE events (`token`, `done`, `error`) and the frontend consumes them with a `ReadableStream` reader. Debounce delay is 0ms for Groq (500+ tok/s) and 16ms for other providers to balance responsiveness and DOM performance.
+---
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | FastAPI · uvicorn |
+| Vector DB | ChromaDB |
+| LLM Providers | Ollama · Claude (Anthropic) · Groq · Gemini |
+| Embeddings | Ollama - nomic-embed-text |
+| Web Search | Anthropic native · Google grounding · DuckDuckGo fallback |
+| Rate limiting | slowapi |
+| Frontend | Vanilla JS · SSE · Prism.js |
+| Testing | pytest · pytest-asyncio |
+| CI | GitHub Actions |
+| Deployment | Docker · docker-compose |
 
 ---
 
 ## Getting Started
 
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) - recommended, everything else is handled
+- Or: Python 3.13+ and [Ollama](https://ollama.com/download) for manual setup
+
 ### Docker (recommended)
 
-The fastest way to run REX. Starts Ollama, pulls the required models, and launches the API in one command.
-
 ```bash
+git clone https://github.com/tomadams2909/rex.git
+cd rex
 docker compose up
 ```
 
-Open [http://localhost:8000/app](http://localhost:8000/app) once the models finish pulling (~5 min on first run).
+Models are pulled automatically on first run (~5 min). No GPU required - remove the `deploy` block from `docker-compose.yml` to run on CPU.
 
-> **No NVIDIA GPU?** Remove the `deploy` block from the `ollama` service in `docker-compose.yml` — Ollama runs on CPU, just slower.
+```bash
+cp .env.example .env
+# Add API keys to .env to enable cloud providers (optional)
+```
 
-> **Cloud providers?** Copy `.env.example` to `.env`, add your API keys, and uncomment the relevant lines in `docker-compose.yml`.
-
----
-
-### Manual Setup
-
-### Prerequisites
-
-- Python 3.13+
-- [Ollama](https://ollama.com/download) installed and running
-- Node.js (optional, for Electron packaging)
-
-### 1. Clone and install
+<details>
+<summary>Manual setup (without Docker)</summary>
 
 ```bash
 git clone https://github.com/tomadams2909/rex.git
@@ -153,75 +130,76 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 2. Pull local models
-
 ```bash
-ollama pull nomic-embed-text   # embeddings
-ollama pull qwen2.5-coder:7b   # code model
-ollama pull qwen3.5:9b         # reasoning model
+ollama pull nomic-embed-text
+ollama pull qwen2.5-coder:7b
+ollama pull qwen3.5:9b
 ```
-
-### 3. Configure environment (optional — for cloud providers)
-
-```bash
-cp .env.example .env
-# Add your API keys to .env:
-# ANTHROPIC_API_KEY=sk-ant-...
-# GROQ_API_KEY=gsk_...
-# GEMINI_API_KEY=AIza...
-```
-
-### 4. Start REX
 
 ```bash
 python api.py
 ```
 
-Open [http://127.0.0.1:8000/app](http://127.0.0.1:8000/app) in your browser.
+</details>
 
-### 5. Index your first project
+### Services
 
-In the sidebar, enter the path to any local project and click **Index Project**. REX will chunk and embed every allowed file. Then start asking questions.
+| Service | URL |
+|---|---|
+| REX UI | http://localhost:8000/app |
+| API | http://localhost:8000 |
+| API docs | http://localhost:8000/docs |
+
+Once running, enter the path to any local project in the sidebar and click **Index Project**. REX chunks and embeds every file, then you can start querying.
 
 ---
 
-## Running Tests
+## Features
 
-The test suite covers the API endpoints, RAG injection strategy, memory management, provider abstraction, file security, and ingestion pipeline — 45 tests across 8 files.
+### RAG pipeline
+
+REX chunks source files into overlapping 60-line segments, embeds them with `nomic-embed-text`, and stores them in ChromaDB. On each query the most semantically relevant chunks are retrieved and injected into the prompt - never stored in history. This keeps the context window lean regardless of conversation length.
+
+### Multi-provider LLM support
+
+| Tier | Model | Cost | Strength |
+|------|-------|------|----------|
+| Local | qwen2.5-coder:7b, qwen3.5:9b | Free, offline | Privacy, zero cost |
+| Cloud Free | Groq Llama 3.3 70B | Free | 10× local params, 500+ tok/s |
+| Cloud Paid | Gemini 2.5 Flash | ~$0.001/query | 1M token context window |
+| Cloud Premium | Claude Sonnet 4.6 | ~$0.04/query | Highest quality reasoning |
+
+Switch providers per-query from the UI. Token usage and estimated cost are tracked per provider.
+
+### File review
+
+Load any indexed file into a cloud model's full context window and receive a structured four-section analysis: Bugs · Security Issues · Code Quality · Improvement Suggestions. File size is checked before the stream starts - oversized files are rejected with a clear error before any tokens are consumed.
+
+### Tiered web search
+
+- Claude → native Anthropic web search tool (autonomous, cited)
+- Gemini → Google grounding (native SDK)
+- Groq / Local → DuckDuckGo fallback (free, no API key required)
+
+A single toggle controls web search across all providers. Automatically disabled when offline.
+
+### Conversation memory
+
+Sessions use a sliding window of 20 messages with compression. Older messages are summarised as plain text and prepended as a synthetic exchange so the model retains earlier context without inflating the token count. Sessions are persisted to disk and fully resumable after restarts.
+
+### Customisation
+
+Dark / Darker / OLED backgrounds, HSB accent colour picker with 36 curated swatches, sidebar width presets, and colour blind filters (Deuteranopia, Protanopia, Tritanopia, High Contrast).
+
+---
+
+## Testing
 
 ```bash
-# Install dependencies (if not already done)
-pip install -r requirements.txt
-
-# Run all tests
 pytest tests/ -v
 ```
 
-Tests are isolated from real API calls — all provider keys are removed via `conftest.py` fixtures, so the suite runs offline with no credentials required.
-
----
-
-## Models
-
-### Local (Ollama)
-
-| Model | Role | Context | VRAM |
-|-------|------|---------|------|
-| `qwen2.5-coder:7b` | Code tasks | 32K | ~4.5GB |
-| `qwen3.5:9b` | Reasoning, review | 128K | ~5.5GB |
-| `nomic-embed-text` | Embeddings | 8K | ~300MB |
-
-Local models run entirely on your GPU. Nothing leaves your machine.
-
-### Cloud
-
-| Provider | Model | Context | Web Search |
-|----------|-------|---------|------------|
-| Anthropic | Claude Sonnet 4.6 | 200K | Native (Anthropic) |
-| Google | Gemini 2.5 Flash | 1M | Native (Google) |
-| Groq | Llama 3.3 70B | 128K | DuckDuckGo |
-
-Cloud providers require API keys in `.env`. Token usage and estimated costs are tracked per provider and visible in the sidebar.
+45 tests across 8 files covering the API endpoints, RAG injection strategy, memory management, provider abstraction, chunking pipeline, path traversal protection, and session persistence. All provider keys are stripped by `conftest.py` fixtures - the suite runs fully offline with no credentials required.
 
 ---
 
@@ -230,7 +208,7 @@ Cloud providers require API keys in `.env`. Token usage and estimated costs are 
 ```
 rex/
 ├── api.py               # FastAPI application, all HTTP endpoints
-├── orchestrator.py      # Query logic, RAG pipeline, streaming
+├── orchestrator.py      # RAG pipeline, streaming, think-tag stripping
 ├── ingest.py            # File scanning, chunking, embedding
 ├── retriever.py         # Semantic search against ChromaDB
 ├── memory.py            # Session persistence, history trimming
@@ -240,13 +218,13 @@ rex/
 ├── models/
 │   └── provider.py      # ModelProvider base + all provider implementations
 ├── tools/
-│   ├── file_reader.py   # Safe full-file loading for review mode
+│   ├── file_reader.py   # Safe full-file loading with path traversal protection
 │   └── web_search.py    # DuckDuckGo fallback search
 ├── frontend/
 │   ├── index.html       # Single-page UI
 │   └── style.css        # Dark theme, CSS variables, animations
 └── tests/
-    ├── conftest.py          # Shared fixtures (API key isolation)
+    ├── conftest.py          # Shared fixtures - API key isolation
     ├── test_api.py          # Endpoint tests
     ├── test_ingest.py       # Chunking and file scanning
     ├── test_memory.py       # Session, history trimming, persistence
@@ -259,50 +237,9 @@ rex/
 
 ---
 
-## Screenshots
-
-### RAG Query — asking a question about an indexed codebase
-![RAG query showing code context and cited answer](docs/screenshots/rag-query.png)
-
-### File Review — structured four-section analysis
-![File review output with bugs, security, quality and suggestions sections](docs/screenshots/file-review.png)
-
-### Provider Selector — switching between local and cloud models
-![Model selector showing Ollama, Claude, Groq and Gemini options](docs/screenshots/provider-selector.png)
-
-### Session History — resumable conversations in the sidebar
-![Sidebar showing past sessions with project names and previews](docs/screenshots/session-history.png)
-
----
-
-## Roadmap
-
-- [ ] Electron wrapper — standalone desktop app, no browser required
-- [ ] File and image attachment support (vision models)
-- [ ] Delete indexed projects from UI
-- [ ] Multi-file review mode using Gemini's 1M context window
-
----
-
-## Technical Highlights
-
-These are the engineering decisions worth discussing:
-
-**RAG with token-aware memory** — code chunks are injected into the current turn only, never accumulated in history. This keeps the effective context window small regardless of conversation length, solving the context overflow problem without arbitrary truncation.
-
-**Provider abstraction with native capability flags** — `HAS_NATIVE_SEARCH = True/False` on each provider class lets the orchestrator route web search correctly without conditional logic scattered through the codebase. Adding a new provider with native search is one attribute override.
-
-**Tiered web search** — Claude and Gemini use their native search APIs (better quality, cited sources, autonomous query generation). Groq and local models use DuckDuckGo. A single user toggle controls all providers consistently.
-
-**Streaming with per-provider debounce** — Groq generates at 500+ tokens/second. Rendering markdown on every token causes DOM thrashing. The debounce delay is set to 0ms for Groq and 16ms for other providers, detected at runtime from the active provider state.
-
-**Safe file access** — all file operations resolve paths against the project root and reject anything that traverses outside it. The review endpoint returns a 400 with a clear message if path traversal is attempted.
-
----
-
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT - see [LICENSE](LICENSE)
 
 ---
 
