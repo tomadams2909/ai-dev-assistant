@@ -6,7 +6,7 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - ${HOME}/.ollama:/root/.ollama
+      - ~/.ollama:/root/.ollama
     # Requires NVIDIA GPU + nvidia-container-toolkit.
     # CPU fallback: remove this entire 'deploy' block (expect slower inference).
     deploy:
@@ -24,7 +24,7 @@ services:
     depends_on:
       - ollama
     volumes:
-      - ${HOME}/.ollama:/root/.ollama
+      - ~/.ollama:/root/.ollama
     entrypoint: >
       sh -c "
         sleep 5 &&
