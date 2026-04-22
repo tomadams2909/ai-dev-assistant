@@ -101,7 +101,10 @@ Ask REX to explain a function, find where authentication is handled, review a fi
 ### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) - recommended, everything else is handled
+- NVIDIA GPU + [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) — required for local model inference at usable speed
 - Or: Python 3.13+ and [Ollama](https://ollama.com/download) for manual setup
+
+> **CPU fallback:** remove the `deploy` block from `docker-compose.yml` — inference will work but be significantly slower.
 
 ### Docker (recommended)
 
@@ -111,12 +114,18 @@ cd ai-dev-assistant
 docker compose up
 ```
 
-Models are pulled automatically on first run (~5 min). No GPU required - remove the `deploy` block from `docker-compose.yml` to run on CPU.
+Models are pulled automatically on first run (~11 GB, allow 5–15 min depending on connection).
 
 ```bash
 cp .env.example .env
 # Add API keys to .env to enable cloud providers (optional)
 ```
+
+| Provider | Get API key | Env var |
+|---|---|---|
+| Claude (Anthropic) | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) | `ANTHROPIC_API_KEY` |
+| Groq | [console.groq.com/keys](https://console.groq.com/keys) | `GROQ_API_KEY` |
+| Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | `GEMINI_API_KEY` |
 
 <details>
 <summary>Manual setup (without Docker)</summary>

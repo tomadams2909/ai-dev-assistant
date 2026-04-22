@@ -7,7 +7,8 @@ services:
       - "11434:11434"
     volumes:
       - ollama-models:/root/.ollama
-    # GPU support — remove the 'deploy' block if you don't have an NVIDIA GPU
+    # Requires NVIDIA GPU + nvidia-container-toolkit.
+    # CPU fallback: remove this entire 'deploy' block (expect slower inference).
     deploy:
       resources:
         reservations:
