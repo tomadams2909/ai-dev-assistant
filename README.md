@@ -106,8 +106,8 @@ Ask REX to explain a function, find where authentication is handled, review a fi
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/tomadams2909/rex.git
-cd rex
+git clone https://github.com/tomadams2909/ai-dev-assistant.git
+cd ai-dev-assistant
 docker compose up
 ```
 
@@ -122,8 +122,8 @@ cp .env.example .env
 <summary>Manual setup (without Docker)</summary>
 
 ```bash
-git clone https://github.com/tomadams2909/rex.git
-cd rex
+git clone https://github.com/tomadams2909/ai-dev-assistant.git
+cd ai-dev-assistant
 python -m venv .venv
 .venv\Scripts\activate        # Windows
 # source .venv/bin/activate   # macOS / Linux
@@ -206,7 +206,7 @@ pytest tests/ -v
 ## Project Structure
 
 ```
-rex/
+ai-dev-assistant/
 ├── api.py               # FastAPI application, all HTTP endpoints
 ├── orchestrator.py      # RAG pipeline, streaming, think-tag stripping
 ├── ingest.py            # File scanning, chunking, embedding
